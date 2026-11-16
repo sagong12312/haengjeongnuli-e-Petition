@@ -43,6 +43,8 @@ function layout(ctx, title, body, active = '') {
     <nav aria-label="주 메뉴"><ul>${nav}</ul></nav>
   </div>
 </header>
+${ctx.demoNotice ? `<div class="demo-notice" role="note"><div class="wrap"><strong>시험 중인 서비스입니다.</strong>
+  실제 이름·연락처·민원 내용은 넣지 마세요. 여기서 접수한 내용은 실제 기관에 전달되지 않습니다.</div></div>` : ''}
 <main id="main" class="wrap">
 ${body}
 </main>

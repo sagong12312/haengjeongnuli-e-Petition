@@ -68,6 +68,7 @@ function createApp({ config, nuri, logger = console, captcha, limits = {} }) {
     orgName: config.orgName,
     orgContact: config.orgContact,
     privacyRetention: config.privacyRetention,
+    demoNotice: config.demoNotice === true,
   };
   const captchas = captcha || new CaptchaStore();
   const limiters = {

@@ -70,3 +70,7 @@ table.wide { min-width: 900px; }
 .pager span[aria-current] { background: var(--brand); color: #fff; border-color: var(--brand); }
 @media (max-width: 600px) { dl.meta, .receipt dl { grid-template-columns: 1fr; } dd { margin-bottom: 6px; } h1 { font-size: 1.35rem; } }
 @media print { header.site nav, footer.site, .btn { display: none; } body { background: #fff; } }
+
+/* 시험 운영 안내 띠 (EP_DEMO_NOTICE=true) */
+.demo-notice { background: #fff4e5; border-bottom: 2px solid #e8a33d; color: #5c3b00; padding: 10px 0; font-size: 15px; line-height: 1.5; }
+.demo-notice strong { color: #8a4b00; }

@@ -30,6 +30,7 @@ http://127.0.0.1:8080 을 엽니다. `mock/mock-nuri.js`는 규격의 인증·�
 |---|---|
 | `NURI_BASE_URL` | 행정누리 내부 시스템 주소 (예: `https://nuri.internal:8443`) |
 | `EP_SECRET` | 서명 비밀값. 행정누리 `APP_EPETITION_SECRET`과 같은 값, **영문·숫자·기호 32자 이상 (한글 X)** |
+| `EP_DEMO_NOTICE` | `true`면 모든 화면 위에 "시험 중인 서비스, 실제 개인정보를 넣지 마세요" 띠를 보여 줌. 시험으로 다른 사람에게 열 때 켜세요 |
 | `EP_ALLOW_HTTP` | `true`면 `NURI_BASE_URL`에 `http://`를 허용 (내 PC 시험 전용). 운영은 `https://`만 — 이름·연락처·조회 비밀번호가 오가기 때문 |
 | `NURI_CA_FILE` | (선택) 행정누리 인증서가 사설 CA일 때 CA 파일 |
 | `TLS_CERT_FILE` / `TLS_KEY_FILE` | (선택) 이 서버가 직접 HTTPS를 받을 때. 비우면 앞단 프록시가 TLS를 끝낸다고 봄 |
