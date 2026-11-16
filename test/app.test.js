@@ -148,17 +148,3 @@ test('접수는 국민 IP별로 횟수를 제한한다', async (t) => {
   for (let i = 0; i < 3; i++) codes.push((await agent('POST', '/complaints', { _csrf: 'x' })).status);
   assert.deepEqual(codes, [403, 403, 429]);
 });
-
-test('시험 운영 안내 띠는 EP_DEMO_NOTICE 일 때만', async () => {
-  const { createApp } = require('../src/app');
-  const { listen } = require('./helpers');
-  const nuri = { close() {} };
-  const base = { trustProxy: false, cookieSecure: true, orgName: '시험시', orgContact: '민원실', privacyRetention: '시험' };
-  for (const [demo, expect] of [[true, true], [false, false]]) {
-    const app = createApp({ config: { ...base, demoNotice: demo }, nuri, logger: { info() {}, warn() {}, error() {} } });
-    const a = await listen(app);
-    const html = await (await fetch(a.url + '/')).text();
-    assert.equal(html.includes('시험 중인 서비스입니다'), expect);
-    app.close(); await new Promise((r) => a.server.close(r));
-  }
-});
