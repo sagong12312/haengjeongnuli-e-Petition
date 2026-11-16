@@ -126,7 +126,7 @@ function complaintForm(ctx, { values = {}, errors = {}, message = '', csrf, capt
   return layout(ctx, '민원 신청', `
 <h1>민원 신청</h1>
 ${errorSummary(errors, message)}
-<form method="post" action="/complaints" novalidate>
+<form method="post" action="/complaints" enctype="multipart/form-data" novalidate>
 <input type="hidden" name="_csrf" value="${esc(csrf)}">
 
 <fieldset>
@@ -161,6 +161,12 @@ ${errorSummary(errors, message)}
     <p class="hint">20,000자 이내. 주민등록번호 등 꼭 필요하지 않은 개인정보는 적지 마세요.</p>
     <textarea id="content" name="content" rows="12" maxlength="20000" required${aria(errors, 'content')}>${esc(v.content)}</textarea>
     ${fieldError(errors, 'content')}
+  </div>
+  <div class="field">
+    <label for="files">첨부파일 (선택)</label>
+    <p class="hint" id="files-hint">사진(jpg·png), PDF, 한글(hwp·hwpx) 파일을 3개까지, 하나에 5MB까지 붙일 수 있습니다. 신분증 사진 등 필요 없는 개인정보는 붙이지 마세요.</p>
+    <input id="files" name="files" type="file" multiple accept=".jpg,.jpeg,.png,.pdf,.hwp,.hwpx" aria-describedby="files-hint${errors && errors.files ? ' files-err' : ''}"${errors && errors.files ? ' aria-invalid="true"' : ''}>
+    ${fieldError(errors, 'files')}
   </div>
 </fieldset>
 
@@ -215,6 +221,7 @@ function complaintDone(ctx, data) {
     <dt>민원 종류</dt><dd>${esc(data.kindLabel)}</dd>
     <dt>접수 일시</dt><dd>${dt(data.receivedAt)}</dd>
     <dt>처리기한</dt><dd>${dt(data.deadlineAt)}</dd>
+    ${data.files ? `<dt>첨부파일</dt><dd>${esc(String(data.files))}개</dd>` : ''}
   </dl>
 </div>
 <div class="alert alert-warn">

@@ -14,8 +14,12 @@ const {
   setSecurityHeaders, clientIp, RateLimiter, csrfToken, verifyCsrf, CaptchaStore,
 } = require('./security');
 const { NuriApiError } = require('./nuriClient');
+const { parseMultipart } = require('./multipart');
+const { checkAttachments } = require('./attachments');
 
 const MAX_FORM_BYTES = 256 * 1024;
+/** 민원 신청(첨부 5MB × 3개 + 글)만 더 크게 받는다 */
+const MAX_MULTIPART_BYTES = 16 * 1024 * 1024;
 
 const STATIC = {
   '/static/style.css': { file: path.join(__dirname, '..', 'public', 'style.css'), type: 'text/css; charset=utf-8' },
@@ -23,17 +27,29 @@ const STATIC = {
 };
 
 /** 행정누리 오류 코드 → 양식 칸 */
-const SUBMIT_ERROR_FIELD = { invalid_kind: 'kind', invalid_password: 'password', invalid_content: 'content' };
+const SUBMIT_ERROR_FIELD = { invalid_kind: 'kind', invalid_password: 'password', invalid_content: 'content', invalid_file: 'files' };
 
 class HttpError extends Error {
   constructor(status, message) { super(message); this.status = status; }
 }
 
-function readForm(req) {
+/**
+ * 양식 읽기. 기본은 urlencoded 만, allowMultipart 이면 첨부가 있는 multipart 도 받는다.
+ * 돌려주는 값: 글 칸 { 이름: 값 } (multipart 이면 _files 에 [{ field, filename, data }])
+ */
+function readForm(req, { allowMultipart = false } = {}) {
   return new Promise((resolve, reject) => {
     const ct = String(req.headers['content-type'] || '');
-    if (!ct.startsWith('application/x-www-form-urlencoded')) {
+    const multipart = allowMultipart && ct.startsWith('multipart/form-data');
+    if (!multipart && !ct.startsWith('application/x-www-form-urlencoded')) {
       reject(new HttpError(415, '지원하지 않는 요청 형식입니다.'));
+      req.resume();
+      return;
+    }
+    const max = multipart ? MAX_MULTIPART_BYTES : MAX_FORM_BYTES;
+    const declared = Number.parseInt(req.headers['content-length'] || '0', 10);
+    if (declared > max) {
+      reject(new HttpError(413, multipart ? '첨부파일이 너무 큽니다. 파일 하나에 5MB, 3개까지 붙일 수 있습니다.' : '보낸 내용이 너무 큽니다. 내용을 줄여 주세요.'));
       req.resume();
       return;
     }
@@ -43,9 +59,9 @@ function readForm(req) {
     req.on('data', (c) => {
       if (done) return;
       size += c.length;
-      if (size > MAX_FORM_BYTES) {
+      if (size > max) {
         done = true;
-        reject(new HttpError(413, '보낸 내용이 너무 큽니다. 내용을 줄여 주세요.'));
+        reject(new HttpError(413, multipart ? '첨부파일이 너무 큽니다. 파일 하나에 5MB, 3개까지 붙일 수 있습니다.' : '보낸 내용이 너무 큽니다. 내용을 줄여 주세요.'));
         req.resume();
         return;
       }
@@ -54,7 +70,17 @@ function readForm(req) {
     req.on('end', () => {
       if (done) return;
       done = true;
-      const params = new URLSearchParams(Buffer.concat(chunks).toString('utf8'));
+      const body = Buffer.concat(chunks);
+      if (multipart) {
+        try {
+          const { fields, files } = parseMultipart(body, ct);
+          resolve({ ...fields, _files: files });
+        } catch {
+          reject(new HttpError(400, '보낸 양식을 읽을 수 없습니다. 다시 시도해 주세요.'));
+        }
+        return;
+      }
+      const params = new URLSearchParams(body.toString('utf8'));
       const form = {};
       for (const [k, v] of params) if (!(k in form)) form[k] = v;
       resolve(form);
@@ -112,7 +138,7 @@ function createApp({ config, nuri, logger = console, captcha, limits = {} }) {
 
   async function submitComplaint(req, res, ip) {
     if (!limiters.submit.take(ip)) return tooMany(res, limiters.submit, ip);
-    const form = await readForm(req);
+    const form = await readForm(req, { allowMultipart: true });
     if (!verifyCsrf(req, form._csrf)) {
       return showComplaintForm(req, res, 403, form, {}, '화면을 연 지 오래되었거나 잘못된 요청입니다. 다시 입력해 주세요.');
     }
@@ -120,7 +146,14 @@ function createApp({ config, nuri, logger = console, captcha, limits = {} }) {
       return showComplaintForm(req, res, 400, form, { captcha: '자동입력 방지 숫자가 맞지 않습니다. 새 그림을 보고 다시 적어 주세요.' });
     }
     const { errors, payload } = validateComplaintForm(form);
+    const attached = checkAttachments(form._files);
+    if (attached.error) errors.files = attached.error + ' 파일을 다시 골라 주세요.';
+    else if ((form._files || []).some((f) => f.filename && f.data && f.data.length)) {
+      // 다른 칸이 틀려 양식을 다시 보여 줄 때는 브라우저가 고른 파일을 지우므로 안내한다
+      if (Object.keys(errors).length) errors.files = '다른 칸을 고친 뒤 첨부파일을 다시 골라 주세요.';
+    }
     if (Object.keys(errors).length) return showComplaintForm(req, res, 400, form, errors);
+    if (attached.payload.length) payload.files = attached.payload;
 
     try {
       const data = await nuri.submitComplaint(payload, ip);

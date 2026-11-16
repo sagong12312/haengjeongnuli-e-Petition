@@ -192,7 +192,9 @@ function createMockNuri({
     if (nm === '이메일' && !p.email) return fail(res, 400, 'invalid_input', '이메일로 통지받으려면 이메일 주소가 필요합니다.');
     if (nm === '팩스' && !p.fax) return fail(res, 400, 'invalid_input', '팩스로 통지받으려면 팩스 번호가 필요합니다.');
     const rec = addComplaint({ ...p, notifyMethod: nm });
-    return ok(res, { receiptNo: rec.receiptNo, kind: rec.kind, kindLabel: KIND_LABEL[rec.kind], receivedAt: rec.receivedAt, deadlineAt: rec.deadlineAt });
+    const nFiles = Array.isArray(p.files) ? p.files.length : 0;
+    rec.files = nFiles ? p.files.map((f) => ({ name: f.name, size: Buffer.from(f.contentBase64 || '', 'base64').length })) : [];
+    return ok(res, { receiptNo: rec.receiptNo, kind: rec.kind, kindLabel: KIND_LABEL[rec.kind], receivedAt: rec.receivedAt, deadlineAt: rec.deadlineAt, files: nFiles });
   }
 
   function handleLookup(res, p) {
@@ -230,7 +232,7 @@ function createMockNuri({
     let size = 0;
     for await (const c of req) {
       size += c.length;
-      if (size > MAX_BODY) return fail(res, 413, 'body_too_large');
+      if (size > (req.method === 'POST' && req.url.endsWith('/complaints') ? 21 * 1024 * 1024 : MAX_BODY)) return fail(res, 413, 'body_too_large');
       chunks.push(c);
     }
     const body = Buffer.concat(chunks);
