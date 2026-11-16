@@ -164,6 +164,10 @@ function createApp({ config, nuri, logger = console, captcha, limits = {} }) {
         if (e.code === 'not_matched') {
           return showLookupForm(req, res, 401, form, {}, '접수번호 또는 비밀번호가 맞지 않습니다.');
         }
+        if (e.code === 'too_many_attempts') {
+          return showLookupForm(req, res, 429, form, {},
+            e.publicMessage || '조회 비밀번호를 여러 번 틀렸습니다. 잠시 뒤 다시 시도해 주세요.');
+        }
         if (e.code === 'locked') {
           return showLookupForm(req, res, 423, form, {},
             e.publicMessage || '비밀번호를 여러 번 틀려 잠시 조회할 수 없습니다. 30분 뒤에 다시 시도해 주세요.');

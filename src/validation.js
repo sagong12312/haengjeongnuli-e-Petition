@@ -13,9 +13,9 @@ const KINDS = {
 
 const NOTIFY_METHODS = ['문자', '이메일', '팩스', '우편', '방문 수령'];
 
+const { normalizeMobile, normalizePhone } = require('./phone');
+
 const EMAIL_RE = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
-const PHONE_RE = /^0\d{1,2}-?\d{3,4}-?\d{4}$/;
-const MOBILE_RE = /^01[016789]-?\d{3,4}-?\d{4}$/;
 const PASSWORD_RE = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d!@#$%^&*()_+\-=[\]{};':",.<>/?~`|\\]{8,20}$/;
 const RECEIPT_RE = /^\d{4}-\d{6,10}$/;
 
@@ -40,11 +40,15 @@ function validateComplaintForm(f) {
   const errors = {};
   const kind = str(f.kind);
   const name = str(f.name);
-  const mobile = opt(f.mobile);
-  const homePhone = opt(f.homePhone);
+  const mobileRaw = opt(f.mobile);
+  const homeRaw = opt(f.homePhone);
+  const faxRaw = opt(f.fax);
+  // 행정누리와 같은 꼴(010-1234-5678)로 바꿔 보낸다
+  const mobile = mobileRaw ? normalizeMobile(mobileRaw) : null;
+  const homePhone = homeRaw ? normalizePhone(homeRaw) : null;
+  const fax = faxRaw ? normalizePhone(faxRaw) : null;
   const email = opt(f.email);
   const address = opt(f.address);
-  const fax = opt(f.fax);
   let notifyMethod = opt(f.notifyMethod);
   const title = str(f.title);
   const content = typeof f.content === 'string' ? f.content.replace(/\r\n/g, '\n').trim() : '';
@@ -60,15 +64,16 @@ function validateComplaintForm(f) {
   if (!name) errors.name = '이름을 적어 주세요.';
   else if (len(name) > 100) errors.name = '이름은 100자 이내로 적어 주세요.';
 
-  if (mobile && !MOBILE_RE.test(mobile)) errors.mobile = '휴대전화 번호를 010-1234-5678 꼴로 적어 주세요.';
-  if (homePhone && !PHONE_RE.test(homePhone)) errors.homePhone = '전화번호를 지역번호부터 02-123-4567 꼴로 적어 주세요.';
+  if (mobileRaw && !mobile) errors.mobile = '휴대전화 번호를 010-1234-5678 꼴로 적어 주세요.';
+  if (homeRaw && !homePhone) errors.homePhone = '전화번호를 지역번호부터 02-123-4567 꼴로 적어 주세요.';
   if (email && (!EMAIL_RE.test(email) || len(email) > 200)) errors.email = '이메일 주소를 확인해 주세요 (200자 이내).';
-  if (fax && !PHONE_RE.test(fax)) errors.fax = '팩스 번호를 지역번호부터 02-123-4567 꼴로 적어 주세요.';
+  if (faxRaw && !fax) errors.fax = '팩스 번호를 지역번호부터 02-123-4567 꼴로 적어 주세요 (0505 번호도 됩니다).';
   if (address && len(address) > 500) errors.address = '주소는 500자 이내로 적어 주세요.';
 
   if (notifyMethod && !NOTIFY_METHODS.includes(notifyMethod)) {
     errors.notifyMethod = '통지 방법을 다시 골라 주세요.';
-  } else if (notifyMethod === '문자' && !mobile && !homePhone) {
+  } else if (notifyMethod === '문자' && !mobile) {
+    // 집 전화로는 문자를 받을 수 없다 (행정누리도 같은 이유로 거절)
     errors.notifyMethod = '문자 통지를 받으려면 휴대전화 번호를 적어 주세요.';
   } else if (notifyMethod === '이메일' && !email) {
     errors.email = '이메일로 통지받으려면 이메일 주소를 적어 주세요.';

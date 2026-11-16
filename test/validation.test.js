@@ -42,7 +42,8 @@ test('통지 방법별 필수 연락처', () => {
   assert.ok(validateComplaintForm({ ...base, notifyMethod: '이메일' }).errors.email);
   assert.ok(validateComplaintForm({ ...base, notifyMethod: '팩스' }).errors.fax);
   assert.ok(validateComplaintForm({ ...base, mobile: '', notifyMethod: '문자' }).errors.notifyMethod);
-  assert.deepEqual(validateComplaintForm({ ...base, mobile: '', homePhone: '02-123-4567', notifyMethod: '문자' }).errors, {});
+  // 집 전화로는 문자를 받을 수 없다
+  assert.ok(validateComplaintForm({ ...base, mobile: '', homePhone: '02-123-4567', notifyMethod: '문자' }).errors.notifyMethod);
   assert.ok(validateComplaintForm({ ...base, notifyMethod: '전보' }).errors.notifyMethod);
 });
 
@@ -61,4 +62,22 @@ test('조회 양식', () => {
 test('목록 쿼리: page 는 1 이상, q 는 100자까지', () => {
   assert.deepEqual(parseListQuery(new URLSearchParams('page=-3&q=' + 'a'.repeat(150))), { page: 1, q: 'a'.repeat(100) });
   assert.deepEqual(parseListQuery(new URLSearchParams('page=2&q=%20가로등%20')), { page: 2, q: '가로등' });
+});
+
+test('전화번호: 0505 팩스, 하이픈 없이·띄어쓰기도 받고 같은 꼴로 보낸다', () => {
+  const { normalizeMobile, normalizePhone } = require('../src/phone');
+  assert.equal(normalizeMobile('01012345678'), '010-1234-5678');
+  assert.equal(normalizeMobile('010 1234 5678'), '010-1234-5678');
+  assert.equal(normalizeMobile('010-1234-567'), null);
+  assert.equal(normalizeMobile('02-123-4567'), null);
+  assert.equal(normalizePhone('0505-123-4567'), '0505-123-4567');
+  assert.equal(normalizePhone('050412345678'), '0504-1234-5678');
+  assert.equal(normalizePhone('07012345678'), '070-1234-5678');
+  assert.equal(normalizePhone('1588-1234'), '1588-1234');
+  assert.equal(normalizePhone('039-123-4567'), null);
+  const r = validateComplaintForm({ ...base, mobile: '010 1234 5678', fax: '0505.123.4567', notifyMethod: '팩스' });
+  assert.deepEqual(r.errors, {});
+  assert.equal(r.payload.mobile, '010-1234-5678');
+  assert.equal(r.payload.fax, '0505-123-4567');
+  assert.ok(validateComplaintForm({ ...base, mobile: 'abc' }).errors.mobile);
 });

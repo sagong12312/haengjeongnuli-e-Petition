@@ -29,7 +29,13 @@ function loadConfig(env = process.env) {
   }
 
   const secret = env.EP_SECRET || '';
-  if (secret.length < 32) errors.push('EP_SECRET 은 32자 이상이어야 합니다 (행정누리 APP_EPETITION_SECRET 과 같은 값).');
+  if (secret.length < 32 || !/^[\x21-\x7E]+$/.test(secret)) {
+    errors.push('EP_SECRET 은 영문·숫자·기호로 32자 이상이어야 합니다 (한글 X, 행정누리 APP_EPETITION_SECRET 과 같은 값).');
+  }
+  // 이름·연락처·조회 비밀번호가 오가므로 행정누리와는 HTTPS로만 (내 PC 시험만 EP_ALLOW_HTTP=true)
+  if (parsed && parsed.protocol === 'http:' && !bool(env.EP_ALLOW_HTTP, false)) {
+    errors.push('NURI_BASE_URL 은 https:// 로 시작해야 합니다. 내 PC에서 시험할 때만 EP_ALLOW_HTTP=true 를 함께 주세요.');
+  }
 
   let nuriCa;
   if (env.NURI_CA_FILE) {

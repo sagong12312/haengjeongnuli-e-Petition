@@ -16,7 +16,7 @@ const MAX_RESPONSE_BYTES = 4 * 1024 * 1024;
 
 /** 연동 자체가 잘못된 경우 (국민에게 원인을 보여 주지 않음) */
 const INTEGRATION_ERRORS = new Set([
-  'forbidden_network', 'bad_timestamp', 'bad_signature', 'replayed', 'body_too_large',
+  'forbidden_network', 'bad_timestamp', 'bad_signature', 'replayed', 'body_too_large', 'https_required',
 ]);
 
 /** 행정누리가 돌려준 업무 오류 (message 는 국민에게 보여 줄 수 있는 안내) */

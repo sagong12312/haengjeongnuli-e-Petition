@@ -141,11 +141,11 @@ ${errorSummary(errors, message)}
 <fieldset>
   <legend>신청인</legend>
   ${input('name', '이름 <span class="req">(필수)</span>', 'maxlength="100" autocomplete="name" required')}
-  ${input('mobile', '휴대전화', 'type="tel" maxlength="13" autocomplete="tel" placeholder="010-1234-5678"')}
-  ${input('homePhone', '집 전화', 'type="tel" maxlength="13" placeholder="02-123-4567"', '휴대전화가 없으면 적어 주세요.')}
+  ${input('mobile', '휴대전화', 'type="tel" maxlength="20" inputmode="tel" autocomplete="tel" placeholder="010-1234-5678"')}
+  ${input('homePhone', '집 전화', 'type="tel" maxlength="20" inputmode="tel" placeholder="02-123-4567"', '휴대전화가 없으면 적어 주세요.')}
   ${input('email', '이메일', 'type="email" maxlength="200" autocomplete="email"')}
   ${input('address', '주소', 'maxlength="500" autocomplete="street-address"', '우편으로 통지받으려면 꼭 적어 주세요.')}
-  ${input('fax', '팩스', 'type="tel" maxlength="13" placeholder="02-123-4567"', '팩스로 통지받으려면 지역번호부터 적어 주세요.')}
+  ${input('fax', '팩스', 'type="tel" maxlength="20" inputmode="tel" placeholder="02-123-4567"', '팩스로 통지받으려면 지역번호부터 적어 주세요.')}
   <div class="field">
     <label for="notifyMethod">처리 결과 통지 방법</label>
     <select id="notifyMethod" name="notifyMethod"${aria(errors, 'notifyMethod')}>${notifyOpts}</select>
