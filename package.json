@@ -1,0 +1,15 @@
+{
+  "name": "haengjeongnuli-e-petition",
+  "version": "0.1.0",
+  "description": "행정누리 전자민원 - 국민용 전자민원 서비스 (행정누리 연동 API v1 클라이언트)",
+  "private": true,
+  "license": "UNLICENSED",
+  "main": "src/server.js",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node src/server.js",
+    "mock": "node mock/mock-nuri.js",
+    "dev": "node scripts/dev.js",
+    "test": "node --test \"test/*.test.js\""
+  }
+}
