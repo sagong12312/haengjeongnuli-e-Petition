@@ -134,9 +134,10 @@ function createNuriClient({ baseUrl, secret, timeoutMs = 10000, ca, logger = con
       return request('POST', '/complaints/lookup', { receiptNo, password }, clientIp);
     },
     /** 5-3 공개 상담 목록 (kind: QUERY 등, sort: recent·views·likes) */
-    listConsultations(page, q, clientIp, { kind, sort } = {}) {
+    listConsultations(page, q, clientIp, { kind, category, sort } = {}) {
       let qs = pageQuery(page, q);
       if (kind) qs += `&kind=${encodeURIComponent(kind)}`;
+      if (category) qs += `&category=${encodeURIComponent(category)}`;
       if (sort) qs += `&sort=${encodeURIComponent(sort)}`;
       return request('GET', '/consultations' + qs, undefined, clientIp);
     },

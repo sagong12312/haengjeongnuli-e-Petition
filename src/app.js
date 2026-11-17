@@ -9,7 +9,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const views = require('./views');
-const { validateComplaintForm, validateLookupForm, parseListQuery } = require('./validation');
+const { validateComplaintForm, validateLookupForm, parseListQuery, CATEGORIES } = require('./validation');
 const {
   setSecurityHeaders, clientIp, RateLimiter, csrfToken, verifyCsrf, CaptchaStore,
 } = require('./security');
@@ -33,7 +33,7 @@ const STATIC = {
 };
 
 /** 행정누리 오류 코드 → 양식 칸 */
-const SUBMIT_ERROR_FIELD = { invalid_kind: 'kind', invalid_password: 'password', invalid_content: 'content', invalid_file: 'files' };
+const SUBMIT_ERROR_FIELD = { invalid_category: 'category', invalid_kind: 'kind', invalid_password: 'password', invalid_content: 'content', invalid_file: 'files' };
 
 class HttpError extends Error {
   constructor(status, message) { super(message); this.status = status; }
@@ -270,9 +270,11 @@ function createApp({ config, nuri, logger = console, captcha, limits = {}, sessi
     const kindRaw = url.searchParams.get('kind');
     const sortRaw = url.searchParams.get('sort');
     const kind = /^(QUERY|SUGGESTION|GRIEVANCE|OTHER)$/.test(kindRaw || '') ? kindRaw : '';
+    const catRaw = url.searchParams.get('category');
+    const category = CATEGORIES[catRaw] ? catRaw : '';
     const sort = /^(recent|views|likes)$/.test(sortRaw || '') ? sortRaw : 'recent';
-    const data = await nuri.listConsultations(page, q, ip, { kind: kind || undefined, sort: sort === 'recent' ? undefined : sort });
-    send(res, 200, views.consultationList(rc(req), data || {}, q, { kind, sort }));
+    const data = await nuri.listConsultations(page, q, ip, { kind: kind || undefined, category: category || undefined, sort: sort === 'recent' ? undefined : sort });
+    send(res, 200, views.consultationList(rc(req), data || {}, q, { kind, category, sort }));
   }
 
   async function consultation(req, res, ip, id, url) {

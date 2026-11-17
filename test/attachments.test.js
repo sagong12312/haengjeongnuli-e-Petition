@@ -48,7 +48,7 @@ test('화면: 첨부해서 신청하면 행정누리로 함께 간다, 형식이
   t.after(() => s.close());
   const page = await makeAgent(s.url)('GET', '/complaints/new');
   assert.match(page.text, /enctype="multipart\/form-data"/);
-  const base = { kind: 'OTHER', name: '홍길동', mobile: '010-1234-5678', title: '첨부 민원', content: '사진 붙임',
+  const base = { kind: 'OTHER', category: 'ROAD', name: '홍길동', mobile: '010-1234-5678', title: '첨부 민원', content: '사진 붙임',
     password: 'abc12345', password2: 'abc12345', privacyConsent: 'true' };
   // makeAgent 는 urlencoded 만 보내므로 직접 fetch 로 보낸다
   const jar = {};

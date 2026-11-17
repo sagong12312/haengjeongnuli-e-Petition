@@ -13,6 +13,27 @@ const KINDS = {
 
 const NOTIFY_METHODS = ['문자', '이메일', '팩스', '우편', '방문 수령'];
 
+/** 민원 분야 (행정누리 CivilCategory 와 같은 값). 담당 부서를 빨리 찾는 데 씁니다 */
+const CATEGORIES = {
+  ROAD: ['도로·교통', '도로 파손, 신호등·가로등, 교통 시설'],
+  PARKING: ['주차', '불법 주정차, 공영주차장'],
+  TRANSIT: ['대중교통', '버스 노선·정류장, 택시'],
+  CLEAN: ['환경·청소', '생활 쓰레기, 무단 투기, 소음·악취'],
+  WATER: ['상하수도', '수돗물, 누수, 하수구 막힘'],
+  PARK: ['공원·녹지', '공원 시설, 가로수, 산림'],
+  BUILDING: ['주택·건축', '건축 허가·신고, 공동주택, 불법 건축물'],
+  LAND: ['도시계획·토지', '도시계획, 지적, 토지 이용'],
+  WELFARE: ['복지', '기초생활보장, 노인·장애인·아동 복지'],
+  HEALTH: ['보건·위생', '보건소, 감염병, 식품·공중위생 업소'],
+  TAX: ['세무', '지방세 부과·납부, 세외수입'],
+  SAFETY: ['안전·재난', '재난·재해, 시설물 안전, 민방위'],
+  CULTURE: ['문화·체육·관광', '도서관, 체육시설, 축제·관광'],
+  ECONOMY: ['경제·일자리', '일자리, 소상공인, 전통시장'],
+  ANIMAL: ['동물', '반려동물 등록, 유기동물, 동물 피해'],
+  ADMIN: ['행정·민원 서비스', '증명 발급, 공무원 친절, 행정 절차'],
+  ETC: ['기타', '위 분야에 없는 일'],
+};
+
 const { normalizeMobile, normalizePhone } = require('./phone');
 
 const EMAIL_RE = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
@@ -40,6 +61,7 @@ function len(s) {
 function validateComplaintForm(f, opts = {}) {
   const errors = {};
   const kind = str(f.kind);
+  const category = str(f.category);
   const name = str(f.name);
   const mobileRaw = opt(f.mobile);
   const homeRaw = opt(f.homePhone);
@@ -61,6 +83,8 @@ function validateComplaintForm(f, opts = {}) {
 
   if (kind === 'LEGAL') errors.kind = '법정민원은 구비서류와 수수료가 있어 정부24 또는 기관 민원 창구에서 신청해 주세요.';
   else if (!KINDS[kind]) errors.kind = '민원 종류를 골라 주세요.';
+
+  if (!CATEGORIES[category]) errors.category = '민원 분야를 골라 주세요. 잘 모르면 “기타”를 고르세요.';
 
   if (!name) errors.name = '이름을 적어 주세요.';
   else if (len(name) > 100) errors.name = '이름은 100자 이내로 적어 주세요.';
@@ -103,6 +127,7 @@ function validateComplaintForm(f, opts = {}) {
 
   const payload = {
     kind,
+    category,
     lawInterpretation,
     name,
     mobile,
@@ -195,6 +220,6 @@ function parseListQuery(searchParams) {
 
 module.exports = {
   ...module.exports,
-  KINDS, NOTIFY_METHODS, validateComplaintForm, validateLookupForm, parseListQuery, PASSWORD_RE, RECEIPT_RE,
+  KINDS, CATEGORIES, NOTIFY_METHODS, validateComplaintForm, validateLookupForm, parseListQuery, PASSWORD_RE, RECEIPT_RE,
   LOGIN_ID_RE, memberPasswordProblem, validateProfile,
 };

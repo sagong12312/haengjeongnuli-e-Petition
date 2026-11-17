@@ -73,6 +73,11 @@ function guidePage(ctx, info) {
 <div class="table-wrap"><table class="list wide">
 <thead><tr><th scope="col">종류</th><th scope="col">뜻</th><th scope="col">처리기간</th><th scope="col">신청 방법</th></tr></thead>
 <tbody>${rows}</tbody></table></div>
+<h2 id="categories">민원 분야</h2>
+<p class="hint">민원 종류와 따로, 무슨 일에 관한 민원인지 고릅니다. 담당 부서를 빨리 찾는 데 씁니다.</p>
+<div class="table-wrap"><table class="list">
+<thead><tr><th scope="col">분야</th><th scope="col">예</th></tr></thead>
+<tbody>${(Array.isArray(info && info.categories) ? info.categories : []).map((c) => `<tr><th scope="row">${esc(c.label)}</th><td>${esc(c.examples)}</td></tr>`).join('')}</tbody></table></div>
 <h2>이렇게 진행됩니다</h2>
 <ol class="flow">
   <li><strong>신청</strong> — <a href="/complaints/new">민원 신청</a>에서 적어 보냅니다. 접수번호를 받습니다.</li>
@@ -121,6 +126,9 @@ function statsPage(ctx, s) {
 <tbody>${rows}</tbody></table></div>
 <h2>민원 종류별</h2>
 <div class="table-wrap"><table class="list"><thead><tr><th scope="col">종류</th><th scope="col">접수</th><th scope="col">처리</th></tr></thead><tbody>${kinds}</tbody></table></div>
+${Array.isArray(s.categories) && s.categories.length ? `<h2>분야별</h2>
+<div class="table-wrap"><table class="list"><thead><tr><th scope="col">분야</th><th scope="col">접수</th><th scope="col">처리</th></tr></thead>
+<tbody>${s.categories.map((c) => `<tr><th scope="row">${esc(c.label)}</th><td class="num">${esc(c.received)}</td><td class="num">${esc(c.done)}</td></tr>`).join('')}</tbody></table></div>` : ''}
 ${dist.length === 5 ? `<h2>만족도 응답</h2>
 <div class="table-wrap"><table class="list"><thead><tr>${[1, 2, 3, 4, 5].map((n) => `<th scope="col">${n}점</th>`).join('')}</tr></thead>
 <tbody><tr>${dist.map((v) => `<td class="num">${esc(v)}명</td>`).join('')}</tr></tbody></table></div>` : ''}

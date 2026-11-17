@@ -16,6 +16,7 @@ const PREFIX = '/api/epetition/v1';
 const MAX_BODY = 256 * 1024;
 const KIND_LABEL = { QUERY: '질의민원', SUGGESTION: '건의민원', OTHER: '기타민원', GRIEVANCE: '고충민원' };
 const NOTIFY = ['문자', '이메일', '팩스', '우편', '방문 수령'];
+const { CATEGORIES } = require('../src/validation');
 
 function kst(d) {
   const k = new Date(d.getTime() + 9 * 3600 * 1000);
@@ -95,6 +96,7 @@ function createMockNuri({
       id: nextId++,
       receiptNo,
       kind: input.kind,
+      category: CATEGORIES[input.category] ? input.category : 'ETC',
       title: input.title,
       content: input.content,
       name: input.name,
@@ -140,6 +142,8 @@ function createMockNuri({
     return {
       receiptNo: rec.receiptNo,
       kindLabel: KIND_LABEL[rec.kind],
+      category: rec.category,
+      categoryLabel: CATEGORIES[rec.category][0],
       title: rec.title,
       content: rec.content,
       name: masked ? maskName(rec.name) : rec.name,
@@ -167,9 +171,9 @@ function createMockNuri({
 
   const dispositions = [];
   if (seed) {
-    const r1 = addComplaint({ kind: 'OTHER', name: '홍길동', title: '가로등 고장', content: '중앙로 가로등이 꺼져 있습니다.', password: 'seed1234pw', publicConsent: true, notifyMethod: '문자' });
+    const r1 = addComplaint({ kind: 'OTHER', category: 'ROAD', name: '홍길동', title: '가로등 고장', content: '중앙로 가로등이 꺼져 있습니다.', password: 'seed1234pw', publicConsent: true, notifyMethod: '문자' });
     complete(r1.receiptNo, { text: '가로등을 고쳤습니다.', publish: true });
-    const r2 = addComplaint({ kind: 'SUGGESTION', name: '김철', title: '공원 <벤치> 설치 건의', content: '어린이공원에 벤치를\n더 놓아 주세요.', password: 'seed1234pw', publicConsent: true, notifyMethod: '이메일' });
+    const r2 = addComplaint({ kind: 'SUGGESTION', category: 'PARK', name: '김철', title: '공원 <벤치> 설치 건의', content: '어린이공원에 벤치를\n더 놓아 주세요.', password: 'seed1234pw', publicConsent: true, notifyMethod: '이메일' });
     complete(r2.receiptNo, {
       dept: '공원녹지과', type: '일부 수용', text: '벤치 2개를 설치하겠습니다.', publish: true,
       remedy: '예산 사정으로 요청하신 5개 가운데 2개만 설치합니다. 이 처분에 이의가 있으면 처분이 있음을 안 날부터 90일 이내에 행정심판 또는 행정소송을 청구할 수 있습니다.',
@@ -214,6 +218,7 @@ function createMockNuri({
 
   function handleComplaint(res, p) {
     if (!KIND_LABEL[p.kind]) return fail(res, 400, 'invalid_kind', '질의·건의·고충·기타 민원만 접수합니다. 법정민원은 정부24나 창구에서 신청해 주세요.');
+    if (p.category !== undefined && p.category !== null && !CATEGORIES[p.category]) return fail(res, 422, 'invalid_category', '민원 분야를 다시 골라 주세요.');
     if (p.privacyConsent !== true) return fail(res, 400, 'invalid_input', '개인정보 수집·이용에 동의해야 접수할 수 있습니다.');
     if (typeof p.name !== 'string' || !p.name.trim() || [...p.name].length > 100) return fail(res, 400, 'invalid_input', '이름을 확인해 주세요.');
     if (typeof p.title !== 'string' || !p.title.trim() || [...p.title].length > 300 ||
@@ -292,12 +297,13 @@ function createMockNuri({
     if (req.method === 'POST' && p === '/complaints/lookup') return handleLookup(res, payload);
     if (req.method === 'GET' && p === '/consultations') {
       const kind = u.searchParams.get('kind');
+      const cat = u.searchParams.get('category');
       const sort = u.searchParams.get('sort');
-      let src = published().filter((r) => (!q || r.title.includes(q) || r.content.includes(q)) && (!kind || r.kind === kind));
+      let src = published().filter((r) => (!q || r.title.includes(q) || r.content.includes(q)) && (!kind || r.kind === kind) && (!cat || r.category === cat));
       if (sort === 'views') src = [...src].sort((a, b) => b.views - a.views);
       if (sort === 'likes') src = [...src].sort((a, b) => b.likes - a.likes);
       const list = src.map((r) => ({
-        id: r.id, receiptNo: r.receiptNo, kind: r.kind, kindLabel: KIND_LABEL[r.kind], title: r.title, name: maskName(r.name),
+        id: r.id, receiptNo: r.receiptNo, kind: r.kind, kindLabel: KIND_LABEL[r.kind], category: r.category, categoryLabel: CATEGORIES[r.category][0], title: r.title, name: maskName(r.name),
         receivedAt: r.receivedAt, completedAt: r.result.completedAt, dept: r.dept, views: r.views, likes: r.likes,
       }));
       return ok(res, paginate(list, page));
@@ -326,7 +332,8 @@ function createMockNuri({
     const P = req.method === 'POST';
     if (G && p === '/info') {
       return ok(res, { kinds: Object.entries(KIND_LABEL).map(([kind, label]) => ({ kind, label, description: `${label} 설명`, period: '7일', online: true }))
-        .concat([{ kind: 'LEGAL', label: '법정민원', description: '인허가 등', period: '민원별', online: false }]), maxAddenda: 5 });
+        .concat([{ kind: 'LEGAL', label: '법정민원', description: '인허가 등', period: '민원별', online: false }]),
+        categories: Object.entries(CATEGORIES).map(([category, [label, examples]]) => ({ category, label, examples })), maxAddenda: 5 });
     }
     if (G && p === '/stats') {
       const all = [...complaints.values()];

@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const { startStack, makeAgent, hidden } = require('./helpers');
 
 const form = {
-  kind: 'OTHER', name: '홍길동', mobile: '010-1234-5678', email: '', title: '가로등 고장',
+  kind: 'OTHER', category: 'ROAD', name: '홍길동', mobile: '010-1234-5678', email: '', title: '가로등 고장',
   content: '중앙로 가로등이 꺼져 있습니다. <script>alert(1)</script>',
   password: 'abc12345', password2: 'abc12345', privacyConsent: 'true', publicConsent: 'true',
 };

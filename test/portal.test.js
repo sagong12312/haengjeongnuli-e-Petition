@@ -16,7 +16,7 @@ const member = {
 };
 
 const complaint = {
-  kind: 'OTHER', name: '홍길동', mobile: '010-1234-5678', email: '', title: '회원 민원', content: '내용입니다.',
+  kind: 'OTHER', category: 'CLEAN', name: '홍길동', mobile: '010-1234-5678', email: '', title: '회원 민원', content: '내용입니다.',
   password: '', password2: '', privacyConsent: 'true',
 };
 
@@ -67,7 +67,12 @@ test('공개 상담: 종류·정렬, 공감은 한 번, 비슷한 상담', async
   assert.match(list.text, /공원 &lt;벤치&gt; 설치 건의/);
   assert.ok(!list.text.includes('가로등 고장'));
   assert.match(list.text, /<option value="likes" selected>/);
-  assert.equal(s.mock.accessLog.at(-1).path, '/api/epetition/v1/consultations');
+  const byCat = await agent('GET', '/consultations?category=ROAD');
+  assert.match(byCat.text, /가로등 고장/);
+  assert.ok(!byCat.text.includes('벤치'));
+  assert.match(byCat.text, /<option value="ROAD" selected>도로·교통<\/option>/);
+  assert.match((await agent('GET', '/guide')).text, /id="categories"/);
+  assert.ok(s.mock.accessLog.some((a) => a.path === '/api/epetition/v1/consultations'));
 
   const d = await open(s, agent, '/consultations/1');
   assert.match(d.page.text, /도움이 됐어요/);

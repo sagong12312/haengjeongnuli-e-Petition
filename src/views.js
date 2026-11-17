@@ -2,7 +2,7 @@
 /**
  * 화면 HTML. 민원 내용·처리 결과 등 바깥에서 온 값은 모두 esc() 로 글자로만 출력합니다 (XSS 방지, 규격 6).
  */
-const { KINDS, NOTIFY_METHODS } = require('./validation');
+const { KINDS, CATEGORIES, NOTIFY_METHODS } = require('./validation');
 
 function esc(v) {
   if (v === null || v === undefined) return '';
@@ -158,6 +158,15 @@ ${ctx.member ? `<p class="hint">${esc(ctx.member.name)}님 회원 정보로 이�
   <p class="hint">질의민원은 법령 해석을 묻는 경우 처리기간이 14일, 제도·절차를 묻는 경우 7일입니다.</p>
   <label class="check"><input type="checkbox" name="lawInterpretation" value="true"${v.lawInterpretation === 'true' ? ' checked' : ''}> (질의민원만) 법령 해석을 묻는 질의입니다</label>
   <p class="hint">구비서류·수수료가 있는 법정민원은 <a href="https://www.gov.kr" rel="noopener noreferrer">정부24</a>나 기관 민원 창구에서 신청해 주세요.</p>
+  <div class="field">
+    <label for="category">민원 분야 <span class="req">(필수)</span></label>
+    <p class="hint" id="category-hint">무슨 일에 관한 민원인지 고르면 담당 부서를 빨리 찾습니다. 잘 모르면 “기타”를 고르세요. <a href="/guide#categories">분야 안내</a></p>
+    <select id="category" name="category" required aria-describedby="category-hint${errors && errors.category ? ' category-err' : ''}"${errors && errors.category ? ' aria-invalid="true"' : ''}>
+      <option value="">분야를 골라 주세요</option>
+      ${Object.entries(CATEGORIES).map(([k, [label, ex]]) => `<option value="${k}"${v.category === k ? ' selected' : ''}>${esc(label)} (${esc(ex)})</option>`).join('')}
+    </select>
+    ${fieldError(errors, 'category')}
+  </div>
 </fieldset>
 
 <fieldset>
@@ -310,6 +319,7 @@ function complaintDetail(d, { showName = true } = {}) {
 <dl class="meta">
   <dt>접수번호</dt><dd>${esc(d.receiptNo)}</dd>
   <dt>민원 종류</dt><dd>${esc(d.kindLabel)}</dd>
+  ${d.categoryLabel ? `<dt>분야</dt><dd>${esc(d.categoryLabel)}</dd>` : ''}
   ${showName ? `<dt>신청인</dt><dd>${esc(d.name)}</dd>` : ''}
   ${d.status ? `<dt>처리 상태</dt><dd>${statusBadge(d.status, d.statusLabel)}</dd>` : ''}
   <dt>접수 일시</dt><dd>${dt(d.receivedAt)}</dd>
@@ -407,11 +417,13 @@ function consultationList(ctx, data, q, filter = {}) {
   const items = Array.isArray(data.items) ? data.items : [];
   const kindOpts = ['<option value="">모든 종류</option>'].concat(Object.entries(KINDS).map(([k, label]) =>
     `<option value="${k}"${filter.kind === k ? ' selected' : ''}>${label}</option>`)).join('');
+  const catOpts = ['<option value="">모든 분야</option>'].concat(Object.entries(CATEGORIES).map(([k, [label]]) =>
+    `<option value="${k}"${filter.category === k ? ' selected' : ''}>${esc(label)}</option>`)).join('');
   const sortOpts = SORTS.map(([k, label]) => `<option value="${k}"${(filter.sort || 'recent') === k ? ' selected' : ''}>${label}</option>`).join('');
-  const extra = `${filter.kind ? `&amp;kind=${encodeURIComponent(filter.kind)}` : ''}${filter.sort && filter.sort !== 'recent' ? `&amp;sort=${encodeURIComponent(filter.sort)}` : ''}`;
+  const extra = `${filter.kind ? `&amp;kind=${encodeURIComponent(filter.kind)}` : ''}${filter.category ? `&amp;category=${encodeURIComponent(filter.category)}` : ''}${filter.sort && filter.sort !== 'recent' ? `&amp;sort=${encodeURIComponent(filter.sort)}` : ''}`;
   const rows = items.map((it) => `<tr>
   <td>${esc(it.receiptNo)}</td>
-  <td>${esc(it.kindLabel)}</td>
+  <td>${esc(it.kindLabel)}${it.categoryLabel ? `<br><small>${esc(it.categoryLabel)}</small>` : ''}</td>
   <td class="title"><a href="/consultations/${encodeURIComponent(String(it.id))}">${esc(it.title)}</a></td>
   <td>${esc(it.name)}</td>
   <td>${esc(it.dept)}</td>
@@ -424,6 +436,7 @@ function consultationList(ctx, data, q, filter = {}) {
 <p class="hint">처리가 끝났고, 민원인이 공개에 동의했으며, 담당 공무원이 게시한 민원만 보입니다.</p>
 <form class="search" method="get" action="/consultations" role="search">
   <label for="kind" class="sr-only">민원 종류</label><select id="kind" name="kind">${kindOpts}</select>
+  <label for="category" class="sr-only">민원 분야</label><select id="category" name="category">${catOpts}</select>
   <label for="sort" class="sr-only">정렬</label><select id="sort" name="sort">${sortOpts}</select>
   <label for="q" class="sr-only">검색어</label>
   <input id="q" name="q" value="${esc(q)}" maxlength="100" placeholder="제목·내용 검색">
@@ -431,7 +444,7 @@ function consultationList(ctx, data, q, filter = {}) {
 </form>
 <p class="count">모두 ${esc(data.total ?? 0)}건${q ? ` · “${esc(q)}” 검색 결과` : ''}</p>
 ${items.length ? `<div class="table-wrap"><table class="list">
-<thead><tr><th scope="col">접수번호</th><th scope="col">종류</th><th scope="col">제목</th><th scope="col">신청인</th><th scope="col">담당 부서</th><th scope="col">처리 완료</th><th scope="col">조회</th><th scope="col">공감</th></tr></thead>
+<thead><tr><th scope="col">접수번호</th><th scope="col">종류·분야</th><th scope="col">제목</th><th scope="col">신청인</th><th scope="col">담당 부서</th><th scope="col">처리 완료</th><th scope="col">조회</th><th scope="col">공감</th></tr></thead>
 <tbody>${rows}</tbody></table></div>` : '<p class="empty">찾은 상담이 없습니다.</p>'}
 ${pager('/consultations', data, q, extra)}`, 'consult');
 }

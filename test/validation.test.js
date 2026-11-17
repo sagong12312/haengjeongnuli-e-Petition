@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const { validateComplaintForm, validateLookupForm, parseListQuery } = require('../src/validation');
 
 const base = {
-  kind: 'OTHER', name: '홍길동', mobile: '010-1234-5678', title: '가로등 고장',
+  kind: 'OTHER', category: 'ROAD', name: '홍길동', mobile: '010-1234-5678', title: '가로등 고장',
   content: '중앙로 가로등이 꺼져 있습니다.', password: 'abc12345', password2: 'abc12345', privacyConsent: 'true',
 };
 
@@ -12,7 +12,7 @@ test('올바른 입력은 규격 5-1 JSON 꼴로 바뀐다', () => {
   const { errors, payload } = validateComplaintForm({ ...base, publicConsent: 'true' });
   assert.deepEqual(errors, {});
   assert.deepEqual(payload, {
-    kind: 'OTHER', lawInterpretation: false, name: '홍길동', mobile: '010-1234-5678', homePhone: null,
+    kind: 'OTHER', category: 'ROAD', lawInterpretation: false, name: '홍길동', mobile: '010-1234-5678', homePhone: null,
     email: null, address: null, fax: null, notifyMethod: null, title: '가로등 고장',
     content: '중앙로 가로등이 꺼져 있습니다.', password: 'abc12345', publicConsent: true, privacyConsent: true,
   });
@@ -80,4 +80,11 @@ test('전화번호: 0505 팩스, 하이픈 없이·띄어쓰기도 받고 같은
   assert.equal(r.payload.mobile, '010-1234-5678');
   assert.equal(r.payload.fax, '0505-123-4567');
   assert.ok(validateComplaintForm({ ...base, mobile: 'abc' }).errors.mobile);
+});
+
+test('민원 분야: 고르지 않거나 없는 값이면 안내', () => {
+  const { validateComplaintForm: v } = require('../src/validation');
+  assert.match(v({ ...base, category: '' }).errors.category, /분야를 골라/);
+  assert.match(v({ ...base, category: 'NOPE' }).errors.category, /분야를 골라/);
+  assert.equal(v({ ...base, category: 'ANIMAL' }).payload.category, 'ANIMAL');
 });
