@@ -16,6 +16,8 @@ const {
 const { NuriApiError } = require('./nuriClient');
 const { parseMultipart } = require('./multipart');
 const { checkAttachments } = require('./attachments');
+const { SessionStore } = require('./session');
+const { createPortalRoutes } = require('./portalRoutes');
 
 const MAX_FORM_BYTES = 256 * 1024;
 /** 민원 신청(첨부 5MB × 3개 + 글)만 더 크게 받는다 */
@@ -23,7 +25,11 @@ const MAX_MULTIPART_BYTES = 16 * 1024 * 1024;
 
 const STATIC = {
   '/static/style.css': { file: path.join(__dirname, '..', 'public', 'style.css'), type: 'text/css; charset=utf-8' },
-  '/robots.txt': { body: 'User-agent: *\nDisallow: /lookup\nDisallow: /complaints\nDisallow: /captcha/\n', type: 'text/plain; charset=utf-8' },
+  '/static/app.js': { file: path.join(__dirname, '..', 'public', 'app.js'), type: 'text/javascript; charset=utf-8' },
+  '/robots.txt': {
+    body: 'User-agent: *\nDisallow: /lookup\nDisallow: /complaints\nDisallow: /captcha/\nDisallow: /my\nDisallow: /login\nDisallow: /signup\nDisallow: /logout\n',
+    type: 'text/plain; charset=utf-8',
+  },
 };
 
 /** 행정누리 오류 코드 → 양식 칸 */
@@ -89,7 +95,7 @@ function readForm(req, { allowMultipart = false } = {}) {
   });
 }
 
-function createApp({ config, nuri, logger = console, captcha, limits = {} }) {
+function createApp({ config, nuri, logger = console, captcha, limits = {}, sessions: sessionStore }) {
   const ctx = {
     orgName: config.orgName,
     orgContact: config.orgContact,
@@ -102,7 +108,18 @@ function createApp({ config, nuri, logger = console, captcha, limits = {} }) {
     lookup: new RateLimiter(limits.lookup || { limit: 10, windowMs: 10 * 60_000 }),
     read: new RateLimiter(limits.read || { limit: 60, windowMs: 60_000 }),
     captcha: new RateLimiter(limits.captcha || { limit: 60, windowMs: 60_000 }),
+    login: new RateLimiter(limits.login || { limit: 10, windowMs: 10 * 60_000 }),
+    signup: new RateLimiter(limits.signup || { limit: 5, windowMs: 60 * 60_000 }),
+    action: new RateLimiter(limits.action || { limit: 30, windowMs: 10 * 60_000 }),
   };
+  const sessions = sessionStore || new SessionStore({ cookieSecure: config.cookieSecure });
+  /** 화면에 넘길 값: 로그인했으면 회원 이름도 */
+  const rc = (req) => (req && req.member ? { ...ctx, member: req.member } : ctx);
+  function redirect(res, location) {
+    res.statusCode = 303;
+    res.setHeader('Location', location);
+    res.end();
+  }
   const staticCache = new Map();
 
   function send(res, status, html) {
@@ -131,7 +148,7 @@ function createApp({ config, nuri, logger = console, captcha, limits = {} }) {
   function showComplaintForm(req, res, status = 200, values = {}, errors = {}, message = '') {
     const safe = { ...values };
     delete safe.password; delete safe.password2; delete safe.captcha;
-    send(res, status, views.complaintForm(ctx, {
+    send(res, status, views.complaintForm(rc(req), {
       values: safe, errors, message, csrf: csrfToken(req, res, config.cookieSecure), captchaId: captchas.create(),
     }));
   }
@@ -145,7 +162,7 @@ function createApp({ config, nuri, logger = console, captcha, limits = {} }) {
     if (!captchas.verify(form.captchaId, form.captcha)) {
       return showComplaintForm(req, res, 400, form, { captcha: '자동입력 방지 숫자가 맞지 않습니다. 새 그림을 보고 다시 적어 주세요.' });
     }
-    const { errors, payload } = validateComplaintForm(form);
+    const { errors, payload } = validateComplaintForm(form, { member: req.member });
     const attached = checkAttachments(form._files);
     if (attached.error) errors.files = attached.error + ' 파일을 다시 골라 주세요.';
     else if ((form._files || []).some((f) => f.filename && f.data && f.data.length)) {
@@ -157,7 +174,7 @@ function createApp({ config, nuri, logger = console, captcha, limits = {} }) {
 
     try {
       const data = await nuri.submitComplaint(payload, ip);
-      return send(res, 200, views.complaintDone(ctx, data));
+      return send(res, 200, views.complaintDone(rc(req), data));
     } catch (e) {
       if (e instanceof NuriApiError) {
         const field = SUBMIT_ERROR_FIELD[e.code];
@@ -171,7 +188,7 @@ function createApp({ config, nuri, logger = console, captcha, limits = {} }) {
   /* -------------------------------------------------------------- 처리상황 조회 */
 
   function showLookupForm(req, res, status = 200, values = {}, errors = {}, message = '') {
-    send(res, status, views.lookupForm(ctx, {
+    send(res, status, views.lookupForm(rc(req), {
       values: { receiptNo: values.receiptNo }, errors, message,
       csrf: csrfToken(req, res, config.cookieSecure), captchaId: captchas.create(),
     }));
@@ -191,7 +208,7 @@ function createApp({ config, nuri, logger = console, captcha, limits = {} }) {
 
     try {
       const data = await nuri.lookupComplaint(receiptNo, password, ip);
-      return send(res, 200, views.lookupResult(ctx, data));
+      return send(res, 200, views.lookupResult(rc(req), data, csrfToken(req, res, config.cookieSecure)));
     } catch (e) {
       if (e instanceof NuriApiError) {
         if (e.code === 'not_matched') {
@@ -211,20 +228,60 @@ function createApp({ config, nuri, logger = console, captcha, limits = {} }) {
     }
   }
 
+  /* -------------------------------------------------------------- 첫 화면 · 신청서 */
+
+  async function home(req, res, ip) {
+    let notices = [];
+    try {
+      const d = await nuri.listNotices(1, '', ip);
+      notices = Array.isArray(d && d.items) ? d.items.slice(0, 5) : [];
+    } catch (e) {
+      // 공지를 못 가져와도 첫 화면은 보여 준다
+      logger.warn?.(`[home] 공지사항을 가져오지 못했습니다: ${e.code || e.message}`);
+    }
+    send(res, 200, views.home(rc(req), notices));
+  }
+
+  /** 회원이면 이름·연락처를 미리 채운다 */
+  async function newComplaint(req, res, ip) {
+    if (!req.member) return showComplaintForm(req, res);
+    let values = { name: req.member.name };
+    try {
+      const mem = await nuri.getMember(req.member.memberId, ip);
+      values = { name: mem.name, mobile: mem.mobile || '', email: mem.email || '', address: mem.address || '' };
+    } catch (e) {
+      if (e instanceof NuriApiError && e.code === 'member_not_found') {
+        sessions.destroy(req, res);
+        return redirect(res, '/login');
+      }
+    }
+    return showComplaintForm(req, res, 200, values);
+  }
+
+  const portal = createPortalRoutes({
+    nuri, config, sessions, captchas, limiters, send, readForm, csrfToken, verifyCsrf, notFound, tooMany, rc, redirect,
+  });
+
   /* -------------------------------------------------------------- 공개 목록 */
 
   async function consultations(req, res, ip, url) {
     if (!limiters.read.take(ip)) return tooMany(res, limiters.read, ip);
     const { page, q } = parseListQuery(url.searchParams);
-    const data = await nuri.listConsultations(page, q, ip);
-    send(res, 200, views.consultationList(ctx, data || {}, q));
+    const kindRaw = url.searchParams.get('kind');
+    const sortRaw = url.searchParams.get('sort');
+    const kind = /^(QUERY|SUGGESTION|GRIEVANCE|OTHER)$/.test(kindRaw || '') ? kindRaw : '';
+    const sort = /^(recent|views|likes)$/.test(sortRaw || '') ? sortRaw : 'recent';
+    const data = await nuri.listConsultations(page, q, ip, { kind: kind || undefined, sort: sort === 'recent' ? undefined : sort });
+    send(res, 200, views.consultationList(rc(req), data || {}, q, { kind, sort }));
   }
 
-  async function consultation(req, res, ip, id) {
+  async function consultation(req, res, ip, id, url) {
     if (!limiters.read.take(ip)) return tooMany(res, limiters.read, ip);
     try {
       const data = await nuri.getConsultation(id, ip);
-      send(res, 200, views.consultationDetail(ctx, data || {}));
+      send(res, 200, views.consultationDetail(rc(req), data || {}, {
+        csrf: csrfToken(req, res, config.cookieSecure), id, liked: url.searchParams.get('liked') === '1',
+      }));
     } catch (e) {
       if (e instanceof NuriApiError && (e.status === 404 || e.code === 'not_found')) return notFound(res);
       throw e;
@@ -235,7 +292,7 @@ function createApp({ config, nuri, logger = console, captcha, limits = {} }) {
     if (!limiters.read.take(ip)) return tooMany(res, limiters.read, ip);
     const { page, q } = parseListQuery(url.searchParams);
     const data = await nuri.listDispositions(page, q, ip);
-    send(res, 200, views.dispositionList(ctx, data || {}, q));
+    send(res, 200, views.dispositionList(rc(req), data || {}, q));
   }
 
   /* -------------------------------------------------------------- 정적 파일 */
@@ -261,16 +318,19 @@ function createApp({ config, nuri, logger = console, captcha, limits = {} }) {
     try { url = new URL(req.url, 'http://localhost'); } catch { return notFound(res); }
     const p = url.pathname;
     const m = req.method;
+    const sess = sessions.get(req);
+    req.session = sess;
+    req.member = sess ? { memberId: sess.memberId, loginId: sess.loginId, name: sess.name } : null;
 
     if (m === 'GET' || m === 'HEAD') {
-      if (p === '/') return send(res, 200, views.home(ctx));
+      if (p === '/') return home(req, res, ip);
       if (p === '/healthz') { res.setHeader('Content-Type', 'text/plain'); return res.end('ok'); }
       if (STATIC[p]) return serveStatic(res, STATIC[p]);
-      if (p === '/complaints/new') return showComplaintForm(req, res);
+      if (p === '/complaints/new') return newComplaint(req, res, ip);
       if (p === '/lookup') return showLookupForm(req, res);
       if (p === '/consultations') return consultations(req, res, ip, url);
       let mm = /^\/consultations\/(\d{1,18})$/.exec(p);
-      if (mm) return consultation(req, res, ip, mm[1]);
+      if (mm) return consultation(req, res, ip, mm[1], url);
       if (p === '/dispositions') return dispositions(req, res, ip, url);
       mm = /^\/captcha\/([0-9a-f]{32})\.svg$/.exec(p);
       if (mm) {
@@ -280,12 +340,14 @@ function createApp({ config, nuri, logger = console, captcha, limits = {} }) {
         res.setHeader('Content-Type', 'image/svg+xml; charset=utf-8');
         return res.end(svg);
       }
+      if (await portal.get(req, res, ip, url)) return undefined;
       return notFound(res);
     }
 
     if (m === 'POST') {
       if (p === '/complaints') return submitComplaint(req, res, ip);
       if (p === '/lookup') return lookup(req, res, ip);
+      if (await portal.post(req, res, ip, url)) return undefined;
     }
 
     res.setHeader('Allow', 'GET, HEAD, POST');
@@ -315,7 +377,9 @@ function createApp({ config, nuri, logger = console, captcha, limits = {} }) {
   handler.close = () => {
     Object.values(limiters).forEach((l) => l.stop());
     if (!captcha) captchas.stop();
+    if (!sessionStore) sessions.close();
   };
+  handler.sessions = sessions;
   handler.captchas = captchas;
   return handler;
 }

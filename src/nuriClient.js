@@ -133,9 +133,16 @@ function createNuriClient({ baseUrl, secret, timeoutMs = 10000, ca, logger = con
     lookupComplaint(receiptNo, password, clientIp) {
       return request('POST', '/complaints/lookup', { receiptNo, password }, clientIp);
     },
-    /** 5-3 공개 상담 목록 */
-    listConsultations(page, q, clientIp) {
-      return request('GET', '/consultations' + pageQuery(page, q), undefined, clientIp);
+    /** 5-3 공개 상담 목록 (kind: QUERY 등, sort: recent·views·likes) */
+    listConsultations(page, q, clientIp, { kind, sort } = {}) {
+      let qs = pageQuery(page, q);
+      if (kind) qs += `&kind=${encodeURIComponent(kind)}`;
+      if (sort) qs += `&sort=${encodeURIComponent(sort)}`;
+      return request('GET', '/consultations' + qs, undefined, clientIp);
+    },
+    /** 공개 상담 "도움이 됐어요" (같은 사람은 한 번) */
+    likeConsultation(id, clientIp) {
+      return request('POST', `/consultations/${encodeURIComponent(String(id))}/like`, {}, clientIp);
     },
     /** 5-4 공개 상담 한 건 */
     getConsultation(id, clientIp) {
@@ -144,6 +151,37 @@ function createNuriClient({ baseUrl, secret, timeoutMs = 10000, ca, logger = con
     /** 5-5 행정처분 공개 */
     listDispositions(page, q, clientIp) {
       return request('GET', '/dispositions' + pageQuery(page, q), undefined, clientIp);
+    },
+    /* ---------------- 안내·통계·공지·자주 묻는 질문 */
+    info(clientIp) { return request('GET', '/info', undefined, clientIp); },
+    stats(clientIp) { return request('GET', '/stats', undefined, clientIp); },
+    listNotices(page, q, clientIp) { return request('GET', '/notices' + pageQuery(page, q), undefined, clientIp); },
+    getNotice(id, clientIp) { return request('GET', `/notices/${encodeURIComponent(String(id))}`, undefined, clientIp); },
+    faqs(clientIp) { return request('GET', '/faqs', undefined, clientIp); },
+
+    /* ---------------- 민원인이 하는 일 (조회 때 받은 actionToken) */
+    withdraw(token, reason, clientIp) { return request('POST', '/complaints/withdraw', { token, reason }, clientIp); },
+    addendum(token, text, clientIp) { return request('POST', '/complaints/addendum', { token, text }, clientIp); },
+    rate(token, score, comment, clientIp) { return request('POST', '/complaints/satisfaction', { token, score, comment }, clientIp); },
+
+    /* ---------------- 회원 */
+    signup(member, clientIp) { return request('POST', '/members', member, clientIp); },
+    login(loginId, password, clientIp) { return request('POST', '/members/login', { loginId, password }, clientIp); },
+    getMember(memberId, clientIp) { return request('GET', `/members/${encodeURIComponent(String(memberId))}`, undefined, clientIp); },
+    updateMember(memberId, profile, clientIp) {
+      return request('POST', `/members/${encodeURIComponent(String(memberId))}/profile`, profile, clientIp);
+    },
+    changeMemberPassword(memberId, currentPassword, newPassword, clientIp) {
+      return request('POST', `/members/${encodeURIComponent(String(memberId))}/password`, { currentPassword, newPassword }, clientIp);
+    },
+    deleteMember(memberId, password, clientIp) {
+      return request('POST', `/members/${encodeURIComponent(String(memberId))}/delete`, { password }, clientIp);
+    },
+    memberComplaints(memberId, page, clientIp) {
+      return request('GET', `/members/${encodeURIComponent(String(memberId))}/complaints?page=${encodeURIComponent(String(page))}`, undefined, clientIp);
+    },
+    memberComplaint(memberId, receiptNo, clientIp) {
+      return request('GET', `/members/${encodeURIComponent(String(memberId))}/complaints/${encodeURIComponent(receiptNo)}`, undefined, clientIp);
     },
     close() { agent.destroy(); },
   };

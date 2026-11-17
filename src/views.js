@@ -25,6 +25,8 @@ function layout(ctx, title, body, active = '') {
     ['/lookup', '처리상황 조회', 'lookup'],
     ['/consultations', '공개 상담', 'consult'],
     ['/dispositions', '행정처분 공개', 'disp'],
+    ['/notices', '공지사항', 'notice'],
+    ['/faq', '자주 묻는 질문', 'faq'],
   ].map(([href, label, key]) =>
     `<li><a href="${href}"${key === active ? ' aria-current="page"' : ''}>${label}</a></li>`).join('');
   return `<!doctype html>
@@ -34,10 +36,17 @@ function layout(ctx, title, body, active = '') {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(title)} | ${esc(ctx.orgName)} 행정누리 전자민원</title>
 <link rel="stylesheet" href="/static/style.css">
+<script src="/static/app.js" defer></script>
 </head>
 <body>
 <a class="skip" href="#main">본문 바로가기</a>
 <header class="site">
+  <div class="util wrap">
+    <ul aria-label="회원 메뉴">${ctx.member
+    ? `<li><span class="who">${esc(ctx.member.name)}님</span></li><li><a href="/my"${active === 'my' ? ' aria-current="page"' : ''}>내 민원</a></li><li><a href="/my/profile">내 정보</a></li><li><a href="/logout">로그아웃</a></li>`
+    : `<li><a href="/login"${active === 'login' ? ' aria-current="page"' : ''}>로그인</a></li><li><a href="/signup"${active === 'signup' ? ' aria-current="page"' : ''}>회원가입</a></li>`}</ul>
+    <button type="button" class="btn small" data-font-toggle aria-pressed="false">글자 크게</button>
+  </div>
   <div class="wrap">
     <a class="brand" href="/"><span class="org">${esc(ctx.orgName)}</span> 행정누리 전자민원</a>
     <nav aria-label="주 메뉴"><ul>${nav}</ul></nav>
@@ -48,6 +57,7 @@ ${body}
 </main>
 <footer class="site">
   <div class="wrap">
+    <p><a href="/guide">민원 안내</a> · <a href="/stats">처리 통계</a> · <a href="/terms">이용약관</a> · <a href="/privacy"><strong>개인정보 처리방침</strong></a></p>
     <p>${esc(ctx.orgName)} · 문의 ${esc(ctx.orgContact)}</p>
     <p>법정민원(구비서류·수수료가 있는 민원)은 <a href="https://www.gov.kr" rel="noopener noreferrer">정부24</a> 또는 기관 민원 창구에서 신청하세요.</p>
   </div>
@@ -86,7 +96,10 @@ function captchaField(captchaId, errors) {
 
 /* ------------------------------------------------------------------ 첫 화면 */
 
-function home(ctx) {
+function home(ctx, notices = []) {
+  const list = notices.length ? `<ul class="news">${notices.map((n) =>
+    `<li><a href="/notices/${encodeURIComponent(String(n.id))}">${n.pinned ? '<span class="badge st-progress">고정</span> ' : ''}${esc(n.title)}</a> <time>${dt(n.createdAt).slice(0, 10)}</time></li>`).join('')}</ul>`
+    : '<p class="empty">올라온 공지사항이 없습니다.</p>';
   return layout(ctx, '첫 화면', `
 <section class="hero">
   <h1>${esc(ctx.orgName)} 행정누리 전자민원</h1>
@@ -97,12 +110,19 @@ function home(ctx) {
   <a class="card" href="/lookup"><h2>처리상황 조회</h2><p>접수번호와 조회 비밀번호로 처리 상황과 결과를 봅니다.</p></a>
   <a class="card" href="/consultations"><h2>공개 상담</h2><p>민원인이 공개에 동의한 처리 사례를 찾아봅니다.</p></a>
   <a class="card" href="/dispositions"><h2>행정처분 공개</h2><p>식품위생법·공중위생관리법 위반 업소 행정처분을 봅니다.</p></a>
+  <a class="card" href="/guide"><h2>민원 안내</h2><p>민원 종류별 처리기간과 신청 방법을 봅니다.</p></a>
+  <a class="card" href="/stats"><h2>처리 통계</h2><p>최근 12개월 접수·처리 건수, 평균 처리일, 만족도를 봅니다.</p></a>
 </div>
+<section class="home-notices">
+  <h2>공지사항 <a class="more" href="/notices">더 보기</a></h2>
+  ${list}
+</section>
+${ctx.member ? '' : `<p class="hint">회원으로 가입하면 접수번호·조회 비밀번호 없이 <a href="/my">내 민원</a>에서 처리 상황을 보고, 신청서에 이름·연락처가 미리 채워집니다. <a href="/signup">회원가입</a></p>`}
 <div class="notice">
   <h2>알아 두세요</h2>
   <ul>
     <li>구비서류나 수수료가 있는 <strong>법정민원</strong>은 이곳에서 받지 않습니다. <a href="https://www.gov.kr" rel="noopener noreferrer">정부24</a> 또는 기관 민원 창구를 이용해 주세요.</li>
-    <li>지금은 <strong>글로만</strong> 접수합니다. 첨부할 서류가 있으면 기관에 문의해 주세요.</li>
+    <li>사진(jpg·png), PDF, 한글(hwp·hwpx) 파일을 3개까지(하나에 5MB) 붙일 수 있습니다.</li>
     <li>처리기한은 민원 처리에 관한 법률 시행령 기준으로 행정누리가 근무시간·공휴일을 따져 정합니다.</li>
   </ul>
 </div>`);
@@ -126,7 +146,9 @@ function complaintForm(ctx, { values = {}, errors = {}, message = '', csrf, capt
   return layout(ctx, '민원 신청', `
 <h1>민원 신청</h1>
 ${errorSummary(errors, message)}
-<form method="post" action="/complaints" enctype="multipart/form-data" novalidate>
+${ctx.member ? `<p class="hint">${esc(ctx.member.name)}님 회원 정보로 이름·연락처를 채웠습니다. 이번 신청에만 바꿔 적어도 됩니다. 신청한 민원은 <a href="/my">내 민원</a>에서 볼 수 있습니다.</p>` : ''}
+<p class="hint" data-draft-note hidden>쓰던 내용을 이 브라우저에서 불러왔습니다. <button type="button" class="linkish" data-draft-clear>지우고 새로 쓰기</button></p>
+<form method="post" action="/complaints" enctype="multipart/form-data" novalidate data-draft="complaint">
 <input type="hidden" name="_csrf" value="${esc(csrf)}">
 
 <fieldset>
@@ -171,16 +193,17 @@ ${errorSummary(errors, message)}
 </fieldset>
 
 <fieldset>
-  <legend>처리상황 조회 비밀번호</legend>
+  <legend>처리상황 조회 비밀번호${ctx.member ? ' (회원은 선택)' : ''}</legend>
+  ${ctx.member ? '<p class="hint">회원은 <a href="/my">내 민원</a>에서 처리 상황을 보므로 정하지 않아도 됩니다. 정해 두면 로그인하지 않고도 접수번호로 조회할 수 있습니다.</p>' : ''}
   <p class="hint">영문과 숫자를 섞어 8~20자. 이 비밀번호는 전자민원에 저장하지 않으며, <strong>잊으면 인터넷으로 조회할 수 없습니다</strong>.</p>
   <div class="field">
-    <label for="password">비밀번호 <span class="req">(필수)</span></label>
-    <input id="password" name="password" type="password" minlength="8" maxlength="20" autocomplete="new-password" required${aria(errors, 'password')}>
+    <label for="password">비밀번호${ctx.member ? '' : ' <span class="req">(필수)</span>'}</label>
+    <input id="password" name="password" type="password" minlength="8" maxlength="20" autocomplete="new-password"${ctx.member ? '' : ' required'}${aria(errors, 'password')}>
     ${fieldError(errors, 'password')}
   </div>
   <div class="field">
-    <label for="password2">비밀번호 확인 <span class="req">(필수)</span></label>
-    <input id="password2" name="password2" type="password" minlength="8" maxlength="20" autocomplete="new-password" required${aria(errors, 'password2')}>
+    <label for="password2">비밀번호 확인${ctx.member ? '' : ' <span class="req">(필수)</span>'}</label>
+    <input id="password2" name="password2" type="password" minlength="8" maxlength="20" autocomplete="new-password"${ctx.member ? '' : ' required'}${aria(errors, 'password2')}>
     ${fieldError(errors, 'password2')}
   </div>
 </fieldset>
@@ -227,9 +250,10 @@ function complaintDone(ctx, data) {
 <div class="alert alert-warn">
   <p><strong>접수번호를 꼭 적어 두세요.</strong> 처리 상황은 접수번호와 신청할 때 정한 조회 비밀번호로 확인합니다.</p>
   <p><strong>비밀번호를 잊으면 인터넷으로 조회할 수 없으니 기관(${esc(ctx.orgContact)})에 문의하세요.</strong></p>
-  <p>이 화면은 다시 열 수 없습니다. 필요하면 지금 인쇄하거나 화면을 저장해 두세요.</p>
+  ${ctx.member ? '<p>회원으로 신청하셨으므로 <a href="/my">내 민원</a>에서 언제든 다시 볼 수 있습니다.</p>' : '<p>이 화면은 다시 열 수 없습니다. 필요하면 지금 인쇄하거나 화면을 저장해 두세요.</p>'}
 </div>
-<p><a class="btn" href="/lookup">처리상황 조회로 가기</a></p>`, 'new');
+<p class="actions no-print" data-draft-done="complaint"><button type="button" class="btn" data-print>접수증 인쇄</button>
+  ${ctx.member ? '<a class="btn primary" href="/my">내 민원으로 가기</a>' : '<a class="btn" href="/lookup">처리상황 조회로 가기</a>'}</p>`, 'new');
 }
 
 /* ------------------------------------------------------------------ 처리상황 조회 */
@@ -299,16 +323,54 @@ function complaintDetail(d, { showName = true } = {}) {
 ${steps.length ? `
 <section>
   <h2>처리 과정</h2>
-  <ol class="steps">${steps.map((s) => `<li><span class="step">${esc(s.step)}</span> <time>${dt(s.at)}</time></li>`).join('')}</ol>
+  <ol class="steps">${steps.map((s) => `<li><span class="step">${esc(s.step)}</span> <time>${dt(s.at)}</time>${s.text ? `<div class="text small">${esc(s.text)}</div>` : ''}</li>`).join('')}</ol>
 </section>` : ''}
 ${result}`;
 }
 
-function lookupResult(ctx, d) {
+/** 처리상황 아래: 추가 의견, 취하, 만족도 (조회 때 받은 표 actionToken 으로만) */
+function ownerActions(d, csrf, back) {
+  if (!d.actionToken) return '';
+  const hidden = `<input type="hidden" name="_csrf" value="${esc(csrf)}"><input type="hidden" name="token" value="${esc(d.actionToken)}">
+<input type="hidden" name="receiptNo" value="${esc(d.receiptNo)}"><input type="hidden" name="back" value="${esc(back)}">`;
+  const parts = [];
+  if (d.satisfaction) {
+    parts.push(`<section class="panel-box"><h2>내가 남긴 만족도</h2><p><strong>${esc(d.satisfaction.score)}점</strong> (5점 만점)</p>${d.satisfaction.comment ? `<div class="text">${esc(d.satisfaction.comment)}</div>` : ''}</section>`);
+  }
+  if (d.canRate) {
+    const radios = [5, 4, 3, 2, 1].map((n) => `<label class="radio"><input type="radio" name="score" value="${n}" required> ${n}점${n === 5 ? ' (매우 만족)' : n === 1 ? ' (매우 불만족)' : ''}</label>`).join('');
+    parts.push(`<section class="panel-box"><h2>처리 결과에 만족하시나요?</h2>
+<p class="hint">답변은 기관이 민원 처리를 고치는 데 씁니다. 한 번만 남길 수 있습니다.</p>
+<form method="post" action="/complaints/action">${hidden}<input type="hidden" name="action" value="rate">
+<fieldset><legend>만족도 <span class="req">(필수)</span></legend><div class="radios">${radios}</div></fieldset>
+<div class="field"><label for="rate-comment">의견 (선택, 1,000자 이내)</label><textarea id="rate-comment" name="comment" rows="3" maxlength="1000"></textarea></div>
+<div class="actions"><button type="submit" class="btn primary">만족도 보내기</button></div></form></section>`);
+  }
+  if (d.canAddendum) {
+    parts.push(`<section class="panel-box"><h2>추가 의견 내기</h2>
+<p class="hint">처리 중인 민원에 덧붙일 내용이 있으면 적어 주세요. 담당자에게 바로 알려 드립니다. 한 민원에 5번까지, 한 번에 1,000자까지입니다.</p>
+<form method="post" action="/complaints/action">${hidden}<input type="hidden" name="action" value="addendum">
+<div class="field"><label for="addendum-text">추가 의견 <span class="req">(필수)</span></label><textarea id="addendum-text" name="text" rows="4" maxlength="1000" required></textarea></div>
+<div class="actions"><button type="submit" class="btn">추가 의견 보내기</button></div></form></section>`);
+  }
+  if (d.canWithdraw) {
+    parts.push(`<section class="panel-box"><h2>민원 취하</h2>
+<p class="hint">처리가 끝나기 전이면 민원을 거둬들일 수 있습니다. <strong>취하하면 처리를 멈추며 되돌릴 수 없습니다.</strong> 다시 필요하면 새로 신청해 주세요.</p>
+<form method="post" action="/complaints/action">${hidden}<input type="hidden" name="action" value="withdraw">
+<div class="field"><label for="withdraw-reason">취하 이유 (선택, 500자 이내)</label><textarea id="withdraw-reason" name="reason" rows="2" maxlength="500"></textarea></div>
+<label class="check"><input type="checkbox" name="confirm" value="true" required> 이 민원을 취하합니다.</label>
+<div class="actions"><button type="submit" class="btn danger">민원 취하</button></div></form></section>`);
+  }
+  return parts.length ? `<div class="owner-actions no-print">${parts.join('')}</div>
+<p class="hint no-print">이 화면에서 20분 안에 해 주세요. 시간이 지나면 다시 조회해야 합니다.</p>` : '';
+}
+
+function lookupResult(ctx, d, csrf) {
   return layout(ctx, '처리상황', `
 <h1>처리상황</h1>
 ${complaintDetail(d)}
-<p><a class="btn" href="/lookup">다른 민원 조회</a></p>`, 'lookup');
+${ownerActions(d, csrf, 'lookup')}
+<p class="actions no-print"><button type="button" class="btn" data-print>인쇄</button> <a class="btn" href="/lookup">다른 민원 조회</a></p>`, 'lookup');
 }
 
 /* ------------------------------------------------------------------ 목록 공통 */
@@ -321,11 +383,11 @@ function searchBox(action, q, placeholder) {
 </form>`;
 }
 
-function pager(base, data, q) {
+function pager(base, data, q, extra = '') {
   const page = Number(data.page) || 1;
   const total = Number(data.totalPages) || 1;
   if (total <= 1) return '';
-  const href = (p) => `${base}?page=${p}${q ? `&amp;q=${encodeURIComponent(q)}` : ''}`;
+  const href = (p) => `${base}?page=${p}${q ? `&amp;q=${encodeURIComponent(q)}` : ''}${extra}`;
   const from = Math.max(1, page - 4);
   const to = Math.min(total, from + 9);
   let out = '<nav class="pager" aria-label="쪽 이동"><ul>';
@@ -339,8 +401,14 @@ function pager(base, data, q) {
 
 /* ------------------------------------------------------------------ 공개 상담 */
 
-function consultationList(ctx, data, q) {
+const SORTS = [['recent', '최근 처리순'], ['views', '많이 본 순'], ['likes', '공감 많은 순']];
+
+function consultationList(ctx, data, q, filter = {}) {
   const items = Array.isArray(data.items) ? data.items : [];
+  const kindOpts = ['<option value="">모든 종류</option>'].concat(Object.entries(KINDS).map(([k, label]) =>
+    `<option value="${k}"${filter.kind === k ? ' selected' : ''}>${label}</option>`)).join('');
+  const sortOpts = SORTS.map(([k, label]) => `<option value="${k}"${(filter.sort || 'recent') === k ? ' selected' : ''}>${label}</option>`).join('');
+  const extra = `${filter.kind ? `&amp;kind=${encodeURIComponent(filter.kind)}` : ''}${filter.sort && filter.sort !== 'recent' ? `&amp;sort=${encodeURIComponent(filter.sort)}` : ''}`;
   const rows = items.map((it) => `<tr>
   <td>${esc(it.receiptNo)}</td>
   <td>${esc(it.kindLabel)}</td>
@@ -348,23 +416,42 @@ function consultationList(ctx, data, q) {
   <td>${esc(it.name)}</td>
   <td>${esc(it.dept)}</td>
   <td>${dt(it.completedAt)}</td>
+  <td class="num">${esc(it.views ?? 0)}</td>
+  <td class="num">${esc(it.likes ?? 0)}</td>
 </tr>`).join('');
   return layout(ctx, '공개 상담', `
 <h1>공개 상담</h1>
 <p class="hint">처리가 끝났고, 민원인이 공개에 동의했으며, 담당 공무원이 게시한 민원만 보입니다.</p>
-${searchBox('/consultations', q, '제목·내용 검색')}
+<form class="search" method="get" action="/consultations" role="search">
+  <label for="kind" class="sr-only">민원 종류</label><select id="kind" name="kind">${kindOpts}</select>
+  <label for="sort" class="sr-only">정렬</label><select id="sort" name="sort">${sortOpts}</select>
+  <label for="q" class="sr-only">검색어</label>
+  <input id="q" name="q" value="${esc(q)}" maxlength="100" placeholder="제목·내용 검색">
+  <button type="submit" class="btn">찾기</button>
+</form>
 <p class="count">모두 ${esc(data.total ?? 0)}건${q ? ` · “${esc(q)}” 검색 결과` : ''}</p>
 ${items.length ? `<div class="table-wrap"><table class="list">
-<thead><tr><th scope="col">접수번호</th><th scope="col">종류</th><th scope="col">제목</th><th scope="col">신청인</th><th scope="col">담당 부서</th><th scope="col">처리 완료</th></tr></thead>
+<thead><tr><th scope="col">접수번호</th><th scope="col">종류</th><th scope="col">제목</th><th scope="col">신청인</th><th scope="col">담당 부서</th><th scope="col">처리 완료</th><th scope="col">조회</th><th scope="col">공감</th></tr></thead>
 <tbody>${rows}</tbody></table></div>` : '<p class="empty">찾은 상담이 없습니다.</p>'}
-${pager('/consultations', data, q)}`, 'consult');
+${pager('/consultations', data, q, extra)}`, 'consult');
 }
 
-function consultationDetail(ctx, d) {
+function consultationDetail(ctx, d, { csrf, id, liked: justLiked } = {}) {
+  const related = Array.isArray(d.related) ? d.related : [];
+  const liked = d.liked || justLiked;
   return layout(ctx, d.title || '공개 상담', `
 <p><a href="/consultations">← 공개 상담 목록</a></p>
 <h1>공개 상담</h1>
-${complaintDetail(d)}`, 'consult');
+${complaintDetail(d)}
+<div class="like-box no-print">
+  <p>조회 ${esc(d.views ?? 0)} · 공감 <strong>${esc(d.likes ?? 0)}</strong></p>
+  ${liked ? '<p role="status">이 상담이 도움이 됐다고 알려 주셨습니다. 고맙습니다.</p>'
+    : `<form method="post" action="/consultations/${encodeURIComponent(String(id))}/like"><input type="hidden" name="_csrf" value="${esc(csrf)}">
+  <button type="submit" class="btn">도움이 됐어요</button></form>`}
+</div>
+${related.length ? `<section><h2>비슷한 상담</h2><ul class="news">${related.map((r) =>
+    `<li><a href="/consultations/${encodeURIComponent(String(r.id))}">${esc(r.title)}</a> <time>${dt(r.completedAt).slice(0, 10)}</time></li>`).join('')}</ul></section>` : ''}
+<p class="no-print"><button type="button" class="btn" data-print>인쇄</button></p>`, 'consult');
 }
 
 /* ------------------------------------------------------------------ 행정처분 공개 */
@@ -406,6 +493,7 @@ function errorPage(ctx, status, title, message) {
 }
 
 module.exports = {
-  esc, dt, layout, home, complaintForm, complaintDone, lookupForm, lookupResult,
+  esc, dt, layout, home, complaintForm, complaintDone, lookupForm, lookupResult, ownerActions, complaintDetail,
+  fieldError, aria, errorSummary, captchaField, searchBox, pager, statusBadge,
   consultationList, consultationDetail, dispositionList, errorPage,
 };

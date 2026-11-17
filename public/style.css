@@ -70,3 +70,53 @@ table.wide { min-width: 900px; }
 .pager span[aria-current] { background: var(--brand); color: #fff; border-color: var(--brand); }
 @media (max-width: 600px) { dl.meta, .receipt dl { grid-template-columns: 1fr; } dd { margin-bottom: 6px; } h1 { font-size: 1.35rem; } }
 @media print { header.site nav, footer.site, .btn { display: none; } body { background: #fff; } }
+
+/* ---------------- 회원 메뉴 · 글자 크게 */
+header.site .util { justify-content: flex-end; padding-top: 6px; padding-bottom: 0; font-size: .9rem; }
+header.site .util ul { display: flex; flex-wrap: wrap; gap: 4px 14px; list-style: none; margin: 0; padding: 0; align-items: center; }
+header.site .util a { color: #dbe4ff; } header.site .util a[aria-current="page"] { color: #fff; font-weight: 700; }
+header.site .util .who { color: #fff; font-weight: 700; }
+.btn.small { padding: 2px 10px; font-size: .85rem; min-height: 0; }
+header.site .btn.small { background: transparent; color: #fff; border: 1px solid #8ea2d6; }
+html.big { font-size: 118%; }
+html.big body { font-size: 18.5px; }
+.btn.danger { background: var(--err); color: #fff; border-color: var(--err); }
+.alert-ok { background: #ecfdf3; border: 1px solid #abefc6; color: var(--ok); }
+.linkish { background: none; border: 0; padding: 0; color: var(--brand); text-decoration: underline; cursor: pointer; font: inherit; }
+.text.small { font-size: .92rem; margin-top: 4px; }
+td.num { text-align: right; white-space: nowrap; }
+.search select { padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: #fff; font: inherit; }
+
+/* ---------------- 첫 화면 공지 · 목록 */
+.home-notices { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 4px 20px 12px; margin: 16px 0; }
+.home-notices h2 { display: flex; justify-content: space-between; align-items: baseline; }
+.home-notices .more { font-size: .9rem; font-weight: 400; }
+ul.news { list-style: none; margin: 0; padding: 0; }
+ul.news li { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+ul.news li:last-child { border-bottom: 0; }
+ul.news time { color: var(--muted); white-space: nowrap; font-size: .9rem; }
+ul.links { padding-left: 20px; }
+
+/* ---------------- 자주 묻는 질문 */
+details.faq { background: var(--card); border: 1px solid var(--line); border-radius: 10px; margin: 8px 0; }
+details.faq summary { cursor: pointer; padding: 12px 16px; font-weight: 600; }
+details.faq summary:focus-visible { outline: 3px solid var(--brand); outline-offset: 2px; }
+details.faq .text { padding: 0 16px 14px; }
+ol.flow li, ol.terms li { margin-bottom: 8px; }
+
+/* ---------------- 공감 · 민원인이 하는 일 */
+.like-box { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 16px; margin: 20px 0; }
+.like-box p, .like-box form { margin: 0; }
+.owner-actions { display: grid; gap: 16px; margin-top: 24px; }
+.panel-box { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 4px 20px 16px; }
+
+/* ---------------- 처리 통계 */
+.stat-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin: 16px 0; }
+.stat-cards div { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; display: flex; flex-direction: column; }
+.stat-cards span { color: var(--muted); font-size: .9rem; } .stat-cards strong { font-size: 1.5rem; } .stat-cards small { color: var(--muted); }
+td.barcell { width: 30%; min-width: 80px; }
+.bar { display: block; height: 10px; border-radius: 5px; min-width: 2px; }
+.bar.w0 { width: 0%; } .bar.w5 { width: 5%; } .bar.w10 { width: 10%; } .bar.w15 { width: 15%; } .bar.w20 { width: 20%; } .bar.w25 { width: 25%; } .bar.w30 { width: 30%; } .bar.w35 { width: 35%; } .bar.w40 { width: 40%; } .bar.w45 { width: 45%; } .bar.w50 { width: 50%; } .bar.w55 { width: 55%; } .bar.w60 { width: 60%; } .bar.w65 { width: 65%; } .bar.w70 { width: 70%; } .bar.w75 { width: 75%; } .bar.w80 { width: 80%; } .bar.w85 { width: 85%; } .bar.w90 { width: 90%; } .bar.w95 { width: 95%; } .bar.w100 { width: 100%; }
+.bar.b-rec { background: #93b4f5; } .bar.b-done { background: #2f7d55; }
+
+@media print { header.site .util, .no-print, .owner-actions, .like-box, .search, .pager { display: none !important; } }

@@ -60,12 +60,28 @@ function createMockNuri({
   let seq = 0;
   let nextId = 1;
   const accessLog = [];
+  const notices = [];
+  const faqs = [];
+  const tokens = new Map(); // actionToken → { receiptNo, exp }
+  const likes = new Set(); // id:ip
+  const members = new Map(); // memberId → 회원
+  let nextMemberId = 1;
+  const issueToken = (rec) => {
+    const t = crypto.randomBytes(24).toString('base64url');
+    tokens.set(t, { receiptNo: rec.receiptNo, exp: now() + 20 * 60e3 });
+    return t;
+  };
+  const byToken = (t) => {
+    const e = tokens.get(t);
+    return e && e.exp > now() ? complaints.get(e.receiptNo) : null;
+  };
 
   const json = (res, status, obj) => {
     res.statusCode = status;
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
     res.setHeader('Cache-Control', 'no-store');
     res.end(JSON.stringify(obj));
+    return true;
   };
   const ok = (res, data) => json(res, 200, { ok: true, data });
   const fail = (res, status, error, message) => json(res, status, message ? { ok: false, error, message } : { ok: false, error });
@@ -91,10 +107,33 @@ function createMockNuri({
       dept: null,
       steps: [{ step: '접수', at: kst(at) }],
       result: null,
-      pw: hashPw(input.password),
+      pw: hashPw(input.password || crypto.randomBytes(12).toString('hex')),
+      memberId: input.memberId || null,
+      views: 0,
+      likes: 0,
+      addenda: 0,
+      satisfaction: null,
     };
     complaints.set(receiptNo, rec);
     return rec;
+  }
+
+  function ownerView(rec) {
+    const done = rec.status === 'DONE';
+    const withdrawn = rec.result && rec.result.type === '취하';
+    return {
+      ...view(rec, false),
+      actionToken: issueToken(rec),
+      canWithdraw: !done,
+      canAddendum: !done && rec.addenda < 5,
+      canRate: done && !withdrawn && !rec.satisfaction,
+      ...(rec.satisfaction ? { satisfaction: rec.satisfaction } : {}),
+    };
+  }
+
+  function memberView(m) {
+    const { pw, fails, lockedUntil, ...rest } = m;
+    return rest;
   }
 
   function view(rec, masked) {
@@ -181,7 +220,8 @@ function createMockNuri({
         typeof p.content !== 'string' || !p.content.trim() || [...p.content].length > 20000) {
       return fail(res, 400, 'invalid_content', '제목과 내용을 확인해 주세요.');
     }
-    if (typeof p.password !== 'string' || !/^(?=.*[A-Za-z])(?=.*\d).{8,20}$/.test(p.password)) {
+    if (p.memberId !== undefined && !members.has(p.memberId)) return fail(res, 404, 'member_not_found', '회원 정보를 찾을 수 없습니다.');
+    if (!(p.memberId && p.password === undefined) && (typeof p.password !== 'string' || !/^(?=.*[A-Za-z])(?=.*\d).{8,20}$/.test(p.password))) {
       return fail(res, 400, 'invalid_password', '조회 비밀번호는 영문과 숫자를 섞어 8~20자로 정해 주세요.');
     }
     if (p.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(p.email)) return fail(res, 400, 'invalid_input', '이메일 주소를 확인해 주세요.');
@@ -214,7 +254,7 @@ function createMockNuri({
       return fail(res, 401, 'not_matched', '접수번호 또는 비밀번호가 맞지 않습니다.');
     }
     failures.delete(receiptNo);
-    return ok(res, view(rec, false));
+    return ok(res, ownerView(rec));
   }
 
   function published() {
@@ -251,24 +291,190 @@ function createMockNuri({
     if (req.method === 'POST' && p === '/complaints') return handleComplaint(res, payload);
     if (req.method === 'POST' && p === '/complaints/lookup') return handleLookup(res, payload);
     if (req.method === 'GET' && p === '/consultations') {
-      const list = published().filter((r) => !q || r.title.includes(q) || r.content.includes(q)).map((r) => ({
-        id: r.id, receiptNo: r.receiptNo, kindLabel: KIND_LABEL[r.kind], title: r.title, name: maskName(r.name),
-        receivedAt: r.receivedAt, completedAt: r.result.completedAt, dept: r.dept,
+      const kind = u.searchParams.get('kind');
+      const sort = u.searchParams.get('sort');
+      let src = published().filter((r) => (!q || r.title.includes(q) || r.content.includes(q)) && (!kind || r.kind === kind));
+      if (sort === 'views') src = [...src].sort((a, b) => b.views - a.views);
+      if (sort === 'likes') src = [...src].sort((a, b) => b.likes - a.likes);
+      const list = src.map((r) => ({
+        id: r.id, receiptNo: r.receiptNo, kind: r.kind, kindLabel: KIND_LABEL[r.kind], title: r.title, name: maskName(r.name),
+        receivedAt: r.receivedAt, completedAt: r.result.completedAt, dept: r.dept, views: r.views, likes: r.likes,
       }));
       return ok(res, paginate(list, page));
     }
     const m = /^\/consultations\/(\d+)$/.exec(p);
     if (req.method === 'GET' && m) {
       const rec = published().find((r) => r.id === Number(m[1]));
-      return rec ? ok(res, view(rec, true)) : fail(res, 404, 'not_found', '공개된 상담이 아닙니다.');
+      if (!rec) return fail(res, 404, 'not_found', '공개된 상담이 아닙니다.');
+      rec.views += 1;
+      const ip = req.headers['x-ep-client-ip'] || '';
+      const related = published().filter((r) => r.kind === rec.kind && r.id !== rec.id).slice(0, 5)
+        .map((r) => ({ id: r.id, title: r.title, completedAt: r.result.completedAt }));
+      return ok(res, { ...view(rec, true), views: rec.views, likes: rec.likes, liked: likes.has(`${rec.id}:${ip}`), related });
     }
+    const portal = handlePortal(req, res, p, payload, page, q, u, req.headers['x-ep-client-ip'] || '');
+    if (portal !== undefined) return portal;
     if (req.method === 'GET' && p === '/dispositions') {
       return ok(res, paginate(dispositions.filter((d) => !q || d.bizName.includes(q) || d.address.includes(q)), page));
     }
     return fail(res, 404, 'not_found', '없는 주소입니다.');
   }
 
-  return { handler, complaints, complete, accessLog, dispositions };
+  /** 공지·자주 묻는 질문·안내·통계·공감·민원인이 하는 일·회원. 처리하지 않으면 undefined */
+  function handlePortal(req, res, p, b, page, q, u, ip) {
+    const G = req.method === 'GET';
+    const P = req.method === 'POST';
+    if (G && p === '/info') {
+      return ok(res, { kinds: Object.entries(KIND_LABEL).map(([kind, label]) => ({ kind, label, description: `${label} 설명`, period: '7일', online: true }))
+        .concat([{ kind: 'LEGAL', label: '법정민원', description: '인허가 등', period: '민원별', online: false }]), maxAddenda: 5 });
+    }
+    if (G && p === '/stats') {
+      const all = [...complaints.values()];
+      const done = all.filter((r) => r.status === 'DONE' && r.result.type !== '취하');
+      const sat = done.filter((r) => r.satisfaction);
+      const months = [];
+      for (let i = 11; i >= 0; i--) {
+        const d = new Date(now()); d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth() - i);
+        months.push({ month: d.toISOString().slice(0, 7), received: i === 0 ? all.length : 0, done: i === 0 ? done.length : 0 });
+      }
+      return ok(res, {
+        from: months[0].month, to: months[11].month, received: all.length, done: done.length,
+        withdrawn: all.filter((r) => r.result && r.result.type === '취하').length, online: all.length,
+        avgDays: done.length ? 1.5 : null, onTimeRate: done.length ? 100 : null, satisfactionCount: sat.length,
+        satisfactionAvg: sat.length ? sat.reduce((a, r) => a + r.satisfaction.score, 0) / sat.length : null,
+        satisfactionDist: [1, 2, 3, 4, 5].map((n) => sat.filter((r) => r.satisfaction.score === n).length), months,
+        kinds: Object.entries(KIND_LABEL).map(([kind, label]) => ({ kind, label, received: all.filter((r) => r.kind === kind).length, done: done.filter((r) => r.kind === kind).length })),
+      });
+    }
+    if (G && p === '/notices') {
+      const list = notices.filter((n) => !q || n.title.includes(q) || n.content.includes(q))
+        .map(({ content, ...n }) => n).sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.id - a.id);
+      return ok(res, paginate(list, page));
+    }
+    let m = /^\/notices\/(\d+)$/.exec(p);
+    if (G && m) {
+      const n = notices.find((x) => x.id === Number(m[1]));
+      if (!n) return fail(res, 404, 'not_found', '공지사항을 찾을 수 없습니다.');
+      n.views += 1;
+      return ok(res, n);
+    }
+    if (G && p === '/faqs') {
+      const groups = new Map();
+      for (const f of faqs) { if (!groups.has(f.category)) groups.set(f.category, []); groups.get(f.category).push({ id: f.id, question: f.question, answer: f.answer }); }
+      return ok(res, { categories: [...groups].map(([category, items]) => ({ category, items })) });
+    }
+    m = /^\/consultations\/(\d+)\/like$/.exec(p);
+    if (P && m) {
+      const rec = published().find((r) => r.id === Number(m[1]));
+      if (!rec) return fail(res, 404, 'not_found', '공개된 상담이 아닙니다.');
+      const k = `${rec.id}:${ip}`;
+      const added = !likes.has(k);
+      if (added) { likes.add(k); rec.likes += 1; }
+      return ok(res, { added, likes: rec.likes });
+    }
+    if (P && ['/complaints/withdraw', '/complaints/addendum', '/complaints/satisfaction'].includes(p)) {
+      const rec = byToken(b.token);
+      if (!rec) return fail(res, 401, 'token_expired', '조회한 지 오래되었습니다. 처리상황을 다시 조회해 주세요.');
+      const t = kst(new Date(now()));
+      if (p === '/complaints/withdraw') {
+        if (rec.status === 'DONE') return fail(res, 409, 'already_done', '처리가 끝난 민원은 취하할 수 없습니다.');
+        rec.status = 'DONE';
+        rec.result = { type: '취하', text: '민원인이 전자민원으로 민원을 취하했습니다.', remedy: null, completedAt: t, notifiedBy: '전자민원' };
+        rec.steps.push({ step: '민원 취하', at: t, text: b.reason || '취하' });
+        return ok(res, { receiptNo: rec.receiptNo, withdrawnAt: t });
+      }
+      if (p === '/complaints/addendum') {
+        if (rec.status === 'DONE') return fail(res, 409, 'already_done', '처리가 끝난 민원에는 의견을 덧붙일 수 없습니다.');
+        if (rec.addenda >= 5) return fail(res, 409, 'too_many', '추가 의견은 5번까지 낼 수 있습니다.');
+        if (typeof b.text !== 'string' || !b.text.trim()) return fail(res, 422, 'invalid_input', '추가 의견을 적어 주세요.');
+        rec.addenda += 1;
+        rec.steps.push({ step: '민원인 추가 의견', at: t, text: b.text });
+        return ok(res, { receiptNo: rec.receiptNo, count: rec.addenda });
+      }
+      if (!(b.score >= 1 && b.score <= 5)) return fail(res, 422, 'invalid_input', '만족도를 1~5점 가운데 골라 주세요.');
+      if (rec.status !== 'DONE' || rec.satisfaction || rec.result.type === '취하') return fail(res, 409, 'cannot_rate', '처리가 끝난 민원에만, 한 번만 응답할 수 있습니다.');
+      rec.satisfaction = { score: b.score, comment: b.comment || null, at: t };
+      return ok(res, { receiptNo: rec.receiptNo, score: b.score });
+    }
+    // 회원
+    if (P && p === '/members') {
+      if (b.termsConsent !== true || b.privacyConsent !== true) return fail(res, 422, 'consent_required', '이용약관과 개인정보 수집·이용에 동의해야 가입할 수 있습니다.');
+      if (!/^[a-z][a-z0-9_]{4,19}$/.test(b.loginId || '')) return fail(res, 422, 'invalid_login_id', '아이디 규칙을 확인하세요.');
+      if (typeof b.password !== 'string' || b.password.length < 8) return fail(res, 422, 'invalid_password', '비밀번호 규칙을 확인하세요.');
+      if ([...members.values()].some((x) => x.loginId === b.loginId)) return fail(res, 409, 'login_id_taken', '이미 쓰고 있는 아이디입니다. 다른 아이디를 정하세요.');
+      const mem = { memberId: nextMemberId++, loginId: b.loginId, name: b.name, mobile: b.mobile || null, email: b.email || null,
+        address: b.address || null, createdAt: kst(new Date(now())), pwChangedAt: kst(new Date(now())), pw: hashPw(b.password), fails: 0, lockedUntil: 0 };
+      members.set(mem.memberId, mem);
+      return ok(res, memberView(mem));
+    }
+    if (P && p === '/members/login') {
+      const mem = [...members.values()].find((x) => x.loginId === b.loginId);
+      if (!mem) return fail(res, 401, 'not_matched', '아이디 또는 비밀번호가 맞지 않습니다.');
+      if (mem.lockedUntil > now()) return fail(res, 423, 'locked', '비밀번호를 여러 번 틀려 잠시 로그인할 수 없습니다.');
+      if (typeof b.password !== 'string' || !checkPw(b.password, mem.pw)) {
+        mem.fails += 1;
+        if (mem.fails >= 5) { mem.fails = 0; mem.lockedUntil = now() + 30 * 60e3; }
+        return fail(res, 401, 'not_matched', '아이디 또는 비밀번호가 맞지 않습니다.');
+      }
+      mem.fails = 0;
+      const prev = mem.lastLoginAt || null;
+      mem.lastLoginAt = kst(new Date(now()));
+      return ok(res, { ...memberView(mem), previousLoginAt: prev });
+    }
+    m = /^\/members\/(\d+)(\/.*)?$/.exec(p);
+    if (m) {
+      const mem = members.get(Number(m[1]));
+      if (!mem) return fail(res, 404, 'member_not_found', '회원 정보를 찾을 수 없습니다. 다시 로그인해 주세요.');
+      const rest = m[2] || '';
+      if (G && rest === '') return ok(res, memberView(mem));
+      if (P && rest === '/profile') {
+        if (!b.name) return fail(res, 422, 'invalid_input', '이름을 적으세요.');
+        Object.assign(mem, { name: b.name, mobile: b.mobile || null, email: b.email || null, address: b.address || null });
+        return ok(res, memberView(mem));
+      }
+      if (P && rest === '/password') {
+        if (typeof b.currentPassword !== 'string' || !checkPw(b.currentPassword, mem.pw)) return fail(res, 422, 'wrong_password', '지금 비밀번호가 맞지 않습니다.');
+        mem.pw = hashPw(b.newPassword);
+        mem.pwChangedAt = kst(new Date(now()));
+        return ok(res, { changed: true });
+      }
+      if (P && rest === '/delete') {
+        if (typeof b.password !== 'string' || !checkPw(b.password, mem.pw)) return fail(res, 422, 'wrong_password', '비밀번호가 맞지 않습니다.');
+        let n = 0;
+        for (const r of complaints.values()) if (r.memberId === mem.memberId) { r.memberId = null; n += 1; }
+        members.delete(mem.memberId);
+        return ok(res, { deleted: true, complaints: n });
+      }
+      const mine = [...complaints.values()].filter((r) => r.memberId === mem.memberId).reverse();
+      if (G && rest === '/complaints') {
+        return ok(res, paginate(mine.map((r) => ({ receiptNo: r.receiptNo, kindLabel: KIND_LABEL[r.kind], title: r.title, status: r.status,
+          statusLabel: r.result && r.result.type === '취하' ? '취하' : { RECEIVED: '접수', IN_PROGRESS: '처리 중', DONE: '처리 완료' }[r.status],
+          receivedAt: r.receivedAt, deadlineAt: r.deadlineAt, completedAt: r.result ? r.result.completedAt : null })), page));
+      }
+      const mm = /^\/complaints\/(\d{4}-\d{6})$/.exec(rest);
+      if (G && mm) {
+        const rec = mine.find((r) => r.receiptNo === mm[1]);
+        return rec ? ok(res, ownerView(rec)) : fail(res, 404, 'not_found', '내 민원 가운데 그 접수번호가 없습니다.');
+      }
+    }
+    return undefined;
+  }
+
+  /** 개발용: 공지·자주 묻는 질문 넣기 */
+  function addNotice(title, content, pinned = false) {
+    const n = { id: notices.length + 1, title, content, pinned, views: 0, createdAt: kst(new Date(now())), updatedAt: null };
+    notices.push(n);
+    return n;
+  }
+  function addFaq(category, question, answer) {
+    faqs.push({ id: faqs.length + 1, category, question, answer });
+  }
+  if (seed) {
+    addNotice('전자민원 이용 안내', '질의·건의·고충·기타 민원을 인터넷으로 신청할 수 있습니다.', true);
+    addFaq('민원 신청', '첨부파일은 몇 개까지 붙일 수 있나요?', '3개까지, 하나에 5MB까지입니다.');
+  }
+
+  return { handler, complaints, complete, accessLog, dispositions, notices, faqs, members, addNotice, addFaq };
 }
 
 if (require.main === module) {

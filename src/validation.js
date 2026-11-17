@@ -36,7 +36,8 @@ function len(s) {
 /**
  * 양식 값 → { errors: {필드: 안내}, payload: 행정누리로 보낼 JSON }
  */
-function validateComplaintForm(f) {
+/** opts.member: 로그인한 회원이면 조회 비밀번호를 정하지 않아도 된다 */
+function validateComplaintForm(f, opts = {}) {
   const errors = {};
   const kind = str(f.kind);
   const name = str(f.name);
@@ -93,7 +94,9 @@ function validateComplaintForm(f) {
   if (!content) errors.content = '내용을 적어 주세요.';
   else if (len(content) > 20000) errors.content = '내용은 20,000자 이내로 적어 주세요.';
 
-  if (!PASSWORD_RE.test(password)) errors.password = '조회 비밀번호는 영문과 숫자를 섞어 8~20자로 정해 주세요.';
+  if (opts.member && !password && !password2) {
+    // 회원은 '내 민원'에서 보므로 비워도 된다
+  } else if (!PASSWORD_RE.test(password)) errors.password = '조회 비밀번호는 영문과 숫자를 섞어 8~20자로 정해 주세요.';
   else if (password !== password2) errors.password2 = '비밀번호 확인이 같지 않습니다.';
 
   if (!privacyConsent) errors.privacyConsent = '개인정보 수집·이용에 동의해야 민원을 접수할 수 있습니다.';
@@ -114,8 +117,62 @@ function validateComplaintForm(f) {
     publicConsent,
     privacyConsent,
   };
+  if (opts.member) {
+    payload.memberId = opts.member.memberId;
+    if (!password) delete payload.password;
+  }
   return { errors, payload };
 }
+
+/* ------------------------------------------------------------------ 회원 */
+
+const LOGIN_ID_RE = /^[a-z][a-z0-9_]{4,19}$/;
+
+/** 행정누리와 같은 규칙: 2종류 이상이면 10자 이상, 3종류이면 8자 이상, 64자까지 */
+function memberPasswordProblem(pw, loginId) {
+  if (typeof pw !== 'string' || pw.length < 8 || pw.length > 64) return '비밀번호는 8~64자로 정해 주세요.';
+  const kinds = (/[A-Za-z]/.test(pw) ? 1 : 0) + (/\d/.test(pw) ? 1 : 0) + (/[^A-Za-z0-9]/.test(pw) ? 1 : 0);
+  if (!(kinds >= 3 || (kinds >= 2 && pw.length >= 10))) {
+    return '영문·숫자·특수문자 가운데 2종류 이상이면 10자 이상, 3종류이면 8자 이상으로 정해 주세요.';
+  }
+  if (loginId && pw.toLowerCase().includes(loginId.toLowerCase())) return '비밀번호에 아이디를 넣을 수 없습니다.';
+  if (/(.)\1\1\1/.test(pw)) return '같은 글자를 4번 넘게 잇달아 쓸 수 없습니다.';
+  return null;
+}
+
+/** 이름·휴대전화·이메일·주소 (가입·내 정보 고치기 공통) */
+function validateProfile(f, errors) {
+  const name = str(f.name);
+  const mobileRaw = opt(f.mobile);
+  const mobile = mobileRaw ? normalizeMobile(mobileRaw) : null;
+  const email = opt(f.email);
+  const address = opt(f.address);
+  if (!name) errors.name = '이름을 적어 주세요.';
+  else if (len(name) > 100) errors.name = '이름은 100자 이내로 적어 주세요.';
+  if (mobileRaw && !mobile) errors.mobile = '휴대전화 번호를 010-1234-5678 꼴로 적어 주세요.';
+  if (email && (!EMAIL_RE.test(email) || len(email) > 200)) errors.email = '이메일 주소를 확인해 주세요 (200자 이내).';
+  if (address && len(address) > 500) errors.address = '주소는 500자 이내로 적어 주세요.';
+  return { name, mobile, email, address };
+}
+
+function validateSignupForm(f) {
+  const errors = {};
+  const loginId = str(f.loginId);
+  const password = typeof f.password === 'string' ? f.password : '';
+  const password2 = typeof f.password2 === 'string' ? f.password2 : '';
+  if (!LOGIN_ID_RE.test(loginId)) errors.loginId = '아이디는 영문 소문자로 시작하고 영문 소문자·숫자·밑줄(_)로 5~20자입니다.';
+  const pwBad = memberPasswordProblem(password, loginId);
+  if (pwBad) errors.password = pwBad;
+  else if (password !== password2) errors.password2 = '비밀번호 확인이 같지 않습니다.';
+  const profile = validateProfile(f, errors);
+  const termsConsent = f.termsConsent === 'true';
+  const privacyConsent = f.privacyConsent === 'true';
+  if (!termsConsent) errors.termsConsent = '이용약관에 동의해야 가입할 수 있습니다.';
+  if (!privacyConsent) errors.privacyConsent = '개인정보 수집·이용에 동의해야 가입할 수 있습니다.';
+  return { errors, payload: { loginId, password, ...profile, termsConsent, privacyConsent } };
+}
+
+module.exports.validateSignupForm = validateSignupForm;
 
 function validateLookupForm(f) {
   const errors = {};
@@ -137,5 +194,7 @@ function parseListQuery(searchParams) {
 }
 
 module.exports = {
+  ...module.exports,
   KINDS, NOTIFY_METHODS, validateComplaintForm, validateLookupForm, parseListQuery, PASSWORD_RE, RECEIPT_RE,
+  LOGIN_ID_RE, memberPasswordProblem, validateProfile,
 };
