@@ -12,17 +12,16 @@ const {
 function noticeList(ctx, data, q) {
   const items = Array.isArray(data.items) ? data.items : [];
   const rows = items.map((n) => `<tr>
-  <td>${n.pinned ? '<span class="badge st-progress">고정</span>' : ''}</td>
-  <td class="title"><a href="/notices/${encodeURIComponent(String(n.id))}">${esc(n.title)}</a></td>
-  <td>${dt(n.createdAt).slice(0, 10)}</td>
-  <td class="num">${esc(n.views ?? 0)}</td>
+  <td class="title" data-label="제목">${n.pinned ? '<span class="badge st-progress">고정</span> ' : ''}<a href="/notices/${encodeURIComponent(String(n.id))}">${esc(n.title)}</a></td>
+  <td data-label="올린 날">${dt(n.createdAt).slice(0, 10)}</td>
+  <td class="num" data-label="조회">${esc(n.views ?? 0)}</td>
 </tr>`).join('');
   return layout(ctx, '공지사항', `
 <h1>공지사항</h1>
 ${searchBox('/notices', q, '제목·내용 검색')}
 <p class="count">모두 ${esc(data.total ?? 0)}건</p>
-${items.length ? `<div class="table-wrap"><table class="list">
-<thead><tr><th scope="col"><span class="sr-only">고정</span></th><th scope="col">제목</th><th scope="col">올린 날</th><th scope="col">조회</th></tr></thead>
+${items.length ? `<div class="table-wrap"><table class="list stack">
+<thead><tr><th scope="col">제목</th><th scope="col">올린 날</th><th scope="col">조회</th></tr></thead>
 <tbody>${rows}</tbody></table></div>` : '<p class="empty">공지사항이 없습니다.</p>'}
 ${pager('/notices', data, q)}`, 'notice');
 }
@@ -62,22 +61,22 @@ function guidePage(ctx, info) {
   const kinds = Array.isArray(info && info.kinds) ? info.kinds : [];
   const rows = kinds.map((k) => `<tr>
   <th scope="row">${esc(k.label)}</th>
-  <td>${esc(k.description)}</td>
-  <td>${esc(k.period)}</td>
-  <td>${k.online ? '인터넷 신청 가능' : '<a href="https://www.gov.kr" rel="noopener noreferrer">정부24</a>·기관 창구'}</td>
+  <td data-label="뜻">${esc(k.description)}</td>
+  <td data-label="처리기간">${esc(k.period)}</td>
+  <td data-label="신청 방법">${k.online ? '인터넷 신청 가능' : '<a href="https://www.gov.kr" rel="noopener noreferrer">정부24</a>·기관 창구'}</td>
 </tr>`).join('');
   return layout(ctx, '민원 안내', `
 <h1>민원 안내</h1>
 <h2>민원 종류와 처리기간</h2>
 <p class="hint">민원 처리에 관한 법률과 같은 법 시행령에 따른 기간입니다. 처리기간은 근무시간·공휴일을 빼고 셉니다.</p>
-<div class="table-wrap"><table class="list wide">
+<div class="table-wrap"><table class="list wide stack">
 <thead><tr><th scope="col">종류</th><th scope="col">뜻</th><th scope="col">처리기간</th><th scope="col">신청 방법</th></tr></thead>
 <tbody>${rows}</tbody></table></div>
 <h2 id="categories">민원 분야</h2>
 <p class="hint">민원 종류와 따로, 무슨 일에 관한 민원인지 고릅니다. 담당 부서를 빨리 찾는 데 씁니다.</p>
-<div class="table-wrap"><table class="list">
+<div class="table-wrap"><table class="list stack">
 <thead><tr><th scope="col">분야</th><th scope="col">예</th></tr></thead>
-<tbody>${(Array.isArray(info && info.categories) ? info.categories : []).map((c) => `<tr><th scope="row">${esc(c.label)}</th><td>${esc(c.examples)}</td></tr>`).join('')}</tbody></table></div>
+<tbody>${(Array.isArray(info && info.categories) ? info.categories : []).map((c) => `<tr><th scope="row">${esc(c.label)}</th><td data-label="예">${esc(c.examples)}</td></tr>`).join('')}</tbody></table></div>
 <h2>이렇게 진행됩니다</h2>
 <ol class="flow">
   <li><strong>신청</strong> — <a href="/complaints/new">민원 신청</a>에서 적어 보냅니다. 접수번호를 받습니다.</li>
@@ -103,10 +102,10 @@ function statsPage(ctx, s) {
   const bar = (v, cls) => `<span class="bar ${cls} w${Math.round((((Number(v) || 0) / max) * 100) / 5) * 5}"></span>`;
   const rows = months.map((m) => `<tr>
   <th scope="row">${esc(m.month)}</th>
-  <td class="num">${esc(m.received)}</td><td class="barcell" aria-hidden="true">${bar(m.received, 'b-rec')}</td>
-  <td class="num">${esc(m.done)}</td><td class="barcell" aria-hidden="true">${bar(m.done, 'b-done')}</td>
+  <td class="num" data-label="접수">${esc(m.received)}</td><td class="barcell" aria-hidden="true">${bar(m.received, 'b-rec')}</td>
+  <td class="num" data-label="처리">${esc(m.done)}</td><td class="barcell" aria-hidden="true">${bar(m.done, 'b-done')}</td>
 </tr>`).join('');
-  const kinds = (Array.isArray(s.kinds) ? s.kinds : []).map((k) => `<tr><th scope="row">${esc(k.label)}</th><td class="num">${esc(k.received)}</td><td class="num">${esc(k.done)}</td></tr>`).join('');
+  const kinds = (Array.isArray(s.kinds) ? s.kinds : []).map((k) => `<tr><th scope="row">${esc(k.label)}</th><td class="num" data-label="접수">${esc(k.received)}</td><td class="num" data-label="처리">${esc(k.done)}</td></tr>`).join('');
   const dist = Array.isArray(s.satisfactionDist) ? s.satisfactionDist : [];
   const num = (v, unit) => (v === null || v === undefined ? '—' : `${esc(v)}${unit}`);
   return layout(ctx, '처리 통계', `
@@ -120,18 +119,18 @@ function statsPage(ctx, s) {
   <div><span>만족도 평균</span><strong>${s.satisfactionAvg == null ? '—' : `${esc(s.satisfactionAvg)}점`}</strong><small>응답 ${esc(s.satisfactionCount ?? 0)}명</small></div>
 </div>
 <h2>달마다</h2>
-<div class="table-wrap"><table class="list stats">
+<div class="table-wrap"><table class="list stats stack">
 <caption class="sr-only">달마다 접수·처리 건수</caption>
 <thead><tr><th scope="col">달</th><th scope="col">접수</th><th scope="col"><span class="sr-only">접수 막대</span></th><th scope="col">처리</th><th scope="col"><span class="sr-only">처리 막대</span></th></tr></thead>
 <tbody>${rows}</tbody></table></div>
 <h2>민원 종류별</h2>
-<div class="table-wrap"><table class="list"><thead><tr><th scope="col">종류</th><th scope="col">접수</th><th scope="col">처리</th></tr></thead><tbody>${kinds}</tbody></table></div>
+<div class="table-wrap"><table class="list stack"><thead><tr><th scope="col">종류</th><th scope="col">접수</th><th scope="col">처리</th></tr></thead><tbody>${kinds}</tbody></table></div>
 ${Array.isArray(s.categories) && s.categories.length ? `<h2>분야별</h2>
-<div class="table-wrap"><table class="list"><thead><tr><th scope="col">분야</th><th scope="col">접수</th><th scope="col">처리</th></tr></thead>
-<tbody>${s.categories.map((c) => `<tr><th scope="row">${esc(c.label)}</th><td class="num">${esc(c.received)}</td><td class="num">${esc(c.done)}</td></tr>`).join('')}</tbody></table></div>` : ''}
+<div class="table-wrap"><table class="list stack"><thead><tr><th scope="col">분야</th><th scope="col">접수</th><th scope="col">처리</th></tr></thead>
+<tbody>${s.categories.map((c) => `<tr><th scope="row">${esc(c.label)}</th><td class="num" data-label="접수">${esc(c.received)}</td><td class="num" data-label="처리">${esc(c.done)}</td></tr>`).join('')}</tbody></table></div>` : ''}
 ${dist.length === 5 ? `<h2>만족도 응답</h2>
-<div class="table-wrap"><table class="list"><thead><tr>${[1, 2, 3, 4, 5].map((n) => `<th scope="col">${n}점</th>`).join('')}</tr></thead>
-<tbody><tr>${dist.map((v) => `<td class="num">${esc(v)}명</td>`).join('')}</tr></tbody></table></div>` : ''}
+<div class="table-wrap"><table class="list stack"><thead><tr>${[1, 2, 3, 4, 5].map((n) => `<th scope="col">${n}점</th>`).join('')}</tr></thead>
+<tbody><tr>${dist.map((v, i) => `<td class="num" data-label="${i + 1}점">${esc(v)}명</td>`).join('')}</tr></tbody></table></div>` : ''}
 <p class="hint">취하한 민원 ${esc(s.withdrawn ?? 0)}건은 처리 건수·평균 처리일에서 뺐습니다.</p>`, 'stats');
 }
 
@@ -276,19 +275,19 @@ function logoutConfirm(ctx, csrf) {
 function myList(ctx, data, notice = '') {
   const items = Array.isArray(data.items) ? data.items : [];
   const rows = items.map((c) => `<tr>
-  <td><a href="/my/complaints/${encodeURIComponent(c.receiptNo)}">${esc(c.receiptNo)}</a></td>
-  <td>${esc(c.kindLabel)}</td>
-  <td class="title"><a href="/my/complaints/${encodeURIComponent(c.receiptNo)}">${esc(c.title)}</a></td>
-  <td>${statusBadge(c.statusLabel === '취하' ? '' : c.status, c.statusLabel)}</td>
-  <td>${dt(c.receivedAt)}</td>
-  <td>${c.completedAt ? dt(c.completedAt) : dt(c.deadlineAt) + ' 까지'}</td>
+  <td class="title" data-label="제목"><a href="/my/complaints/${encodeURIComponent(c.receiptNo)}">${esc(c.title)}</a></td>
+  <td data-label="상태">${statusBadge(c.statusLabel === '취하' ? '' : c.status, c.statusLabel)}</td>
+  <td data-label="접수번호">${esc(c.receiptNo)}</td>
+  <td data-label="종류">${esc(c.kindLabel)}</td>
+  <td data-label="접수">${dt(c.receivedAt)}</td>
+  <td data-label="${c.completedAt ? '처리 완료' : '처리기한'}">${c.completedAt ? dt(c.completedAt) : dt(c.deadlineAt) + ' 까지'}</td>
 </tr>`).join('');
   return layout(ctx, '내 민원', `
 <h1>내 민원</h1>
 ${notice ? `<div class="alert alert-ok" role="status"><p>${esc(notice)}</p></div>` : ''}
 <p class="count">모두 ${esc(data.total ?? 0)}건 · <a href="/complaints/new">새 민원 신청</a></p>
-${items.length ? `<div class="table-wrap"><table class="list">
-<thead><tr><th scope="col">접수번호</th><th scope="col">종류</th><th scope="col">제목</th><th scope="col">상태</th><th scope="col">접수</th><th scope="col">처리 완료 / 기한</th></tr></thead>
+${items.length ? `<div class="table-wrap"><table class="list stack">
+<thead><tr><th scope="col">제목</th><th scope="col">상태</th><th scope="col">접수번호</th><th scope="col">종류</th><th scope="col">접수</th><th scope="col">처리 완료 / 기한</th></tr></thead>
 <tbody>${rows}</tbody></table></div>` : '<p class="empty">회원으로 신청한 민원이 없습니다. 가입하기 전에 낸 민원은 <a href="/lookup">처리상황 조회</a>에서 접수번호로 보세요.</p>'}
 ${pager('/my', data, '')}`, 'my');
 }

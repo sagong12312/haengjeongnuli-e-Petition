@@ -120,3 +120,99 @@ td.barcell { width: 30%; min-width: 80px; }
 .bar.b-rec { background: #93b4f5; } .bar.b-done { background: #2f7d55; }
 
 @media print { header.site .util, .no-print, .owner-actions, .like-box, .search, .pager { display: none !important; } }
+
+/* =================================================================== 휴대폰 최적화 */
+/* 머리말: 위 줄(기관 이름 + 메뉴 단추), 아래는 메뉴 판 (넓은 화면에서는 늘 보임) */
+header.site .topbar { padding-top: 10px; padding-bottom: 6px; }
+.menu-btn { display: none; }
+header.site .navrow { padding-top: 0; }
+body { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right); }
+footer.site { padding-bottom: calc(32px + env(safe-area-inset-bottom)); }
+
+/* 누르는 것은 손가락 크기 이상 (44px) */
+.btn { min-height: 44px; display: inline-flex; align-items: center; justify-content: center; }
+.btn.small { min-height: 44px; padding: 0 14px; font-size: .9rem; }
+.radio, .check { min-height: 44px; align-items: center; cursor: pointer; }
+.radio input, .check input { width: 22px; height: 22px; flex: none; margin: 0 4px 0 0; accent-color: var(--brand); }
+details.faq summary { min-height: 44px; display: flex; align-items: center; }
+.pager a, .pager span { min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; }
+.home-notices .more { display: inline-flex; align-items: center; min-height: 44px; padding: 0 4px; }
+input:not([type=checkbox]):not([type=radio]), select, textarea { font-size: 16px; min-height: 44px; } /* 16px 아래면 아이폰이 확대한다 */
+input[type=file] { padding: 8px; }
+
+@media (max-width: 720px) {
+  header.site .topbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  header.site .brand { font-size: 1.05rem; line-height: 1.3; display: inline-block; padding: 11px 0; }
+  .menu-btn {
+    display: inline-flex; align-items: center; gap: 6px; min-height: 44px; min-width: 64px; padding: 0 14px;
+    background: transparent; color: #fff; border: 1px solid #8ea2d6; border-radius: 8px; font: inherit; cursor: pointer;
+  }
+  .menu-btn::before { content: "☰"; font-size: 1.1rem; }
+  .menu-btn[aria-expanded="true"]::before { content: "✕"; }
+  /* 스크립트가 켜진 경우에만 접는다 (꺼져 있으면 메뉴가 그대로 보인다) */
+  html.js header.site .menu-panel { display: none; }
+  html.js header.site.nav-open .menu-panel { display: block; border-top: 1px solid #2c3d6b; padding-bottom: 8px; }
+  html:not(.js) .menu-btn { display: none; }
+  header.site .util { flex-direction: column; align-items: stretch; padding-top: 8px; }
+  header.site .util ul, header nav ul { flex-direction: column; gap: 0; width: 100%; }
+  header.site .navrow, header.site nav { display: block; width: 100%; }
+  header.site .util li, header nav li { width: 100%; }
+  header.site .util li a, header.site .util .who, header nav a {
+    display: flex; align-items: center; min-height: 48px; padding: 0 4px; border-bottom: 1px solid #23345f; font-size: 1.05rem;
+  }
+  header nav a[aria-current="page"], header nav a:hover { border-bottom: 1px solid #23345f; background: #1b2f63; }
+  header.site .util .btn.small { align-self: flex-start; margin-top: 8px; }
+
+  main { padding-top: 16px; }
+  .hero { padding: 16px; }
+  .hero h1 { font-size: 1.3rem; }
+  .cards { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .card { padding: 12px 14px; } .card h2 { font-size: 1.02rem; } .card p { font-size: .88rem; }
+  form fieldset { padding: 12px 14px; }
+  .actions .btn, form .actions .btn.primary { width: 100%; }
+  .actions { display: flex; flex-direction: column; gap: 8px; }
+
+  /* 찾기 양식: 한 줄에 몰지 않고 접어서 */
+  .search { flex-wrap: wrap; }
+  .search select { flex: 1 1 calc(50% - 4px); min-width: 0; }
+  .search input { flex: 1 1 100%; }
+  .search .btn { flex: 1 1 100%; }
+
+  /* 목록 표 → 카드 (옆으로 밀지 않게) */
+  .table-wrap:has(table.stack) { overflow: visible; background: transparent; border: 0; }
+  table.stack, table.stack tbody, table.stack tr, table.stack td, table.stack th { display: block; width: 100%; }
+  table.stack.wide { min-width: 0; }
+  table.stack thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  table.stack tr { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; margin-bottom: 10px; }
+  table.stack td, table.stack th[scope=row] { border: 0; padding: 4px 0; }
+  table.stack th[scope=row] { background: none; font-size: 1.02rem; }
+  table.stack td.title { font-weight: 600; font-size: 1.02rem; min-width: 0; padding-bottom: 6px; }
+  table.stack td.title a { display: inline-block; padding: 6px 0; }
+  table.stack td[data-label]:not(.title) { display: flex; gap: 12px; justify-content: space-between; text-align: right; }
+  table.stack td[data-label]:not(.title)::before { content: attr(data-label); color: var(--muted); text-align: left; flex: none; }
+  table.stack td.num { text-align: right; }
+  table.stack td.barcell { display: none; }
+  .privacy th { width: 38%; }
+
+  .like-box { flex-direction: column; align-items: stretch; }
+  .like-box .btn { width: 100%; }
+  .stat-cards { grid-template-columns: 1fr 1fr; }
+  ul.news li { flex-direction: column; gap: 2px; }
+  ul.news li a { padding: 6px 0; }
+  .receipt .big { font-size: 1.4rem; }
+}
+@media (max-width: 360px) { .cards { grid-template-columns: 1fr; } }
+@media print { .menu-btn { display: none !important; } html.js header.site .menu-panel { display: block !important; } }
+
+/* 넓은 화면: 머리말 두 줄 (기관 이름 + 회원 메뉴 / 주 메뉴), 찾기 양식 한 줄 */
+@media (min-width: 721px) {
+  header.site { position: relative; }
+  header.site .topbar { padding-top: 14px; padding-bottom: 4px; }
+  header.site .util { position: absolute; top: 6px; right: max(16px, calc((100% - 1040px) / 2 + 16px)); padding: 0; width: auto; max-width: none; }
+  header.site .util ul { align-items: center; }
+  header.site .navrow { padding-top: 2px; padding-bottom: 10px; }
+  .search { flex-wrap: nowrap; align-items: stretch; }
+  .search select { flex: 0 1 auto; width: auto; }
+  .search input { flex: 1 1 200px; min-width: 160px; }
+  .search .btn { flex: none; white-space: nowrap; }
+}

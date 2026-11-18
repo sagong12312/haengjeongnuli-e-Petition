@@ -19,6 +19,12 @@ function dt(v) {
   return v ? esc(String(v).replace('T', ' ')) : '-';
 }
 
+/** 글 속 전화번호(02-123-4567, 1588-1234 등)를 눌러서 거는 링크로 */
+function telLinks(text) {
+  return esc(text).replace(/(?<![\d-])(0\d{1,2}-\d{3,4}-\d{4}|1[5-9]\d{2}-\d{4})(?![\d-])/g,
+    (m) => `<a href="tel:${m.replace(/-/g, '')}">${m}</a>`);
+}
+
 function layout(ctx, title, body, active = '') {
   const nav = [
     ['/complaints/new', '민원 신청', 'new'],
@@ -33,23 +39,34 @@ function layout(ctx, title, body, active = '') {
 <html lang="ko">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f1f45">
+<meta name="format-detection" content="telephone=no">
+<meta name="apple-mobile-web-app-title" content="전자민원">
 <title>${esc(title)} | ${esc(ctx.orgName)} 행정누리 전자민원</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/icon-180.png">
 <link rel="stylesheet" href="/static/style.css">
 <script src="/static/app.js" defer></script>
 </head>
 <body>
 <a class="skip" href="#main">본문 바로가기</a>
 <header class="site">
+  <div class="topbar wrap">
+    <a class="brand" href="/"><span class="org">${esc(ctx.orgName)}</span> 행정누리 전자민원</a>
+    <button type="button" class="menu-btn" data-menu-toggle aria-expanded="false" aria-controls="site-menu">메뉴</button>
+  </div>
+  <div class="menu-panel" id="site-menu">
   <div class="util wrap">
     <ul aria-label="회원 메뉴">${ctx.member
     ? `<li><span class="who">${esc(ctx.member.name)}님</span></li><li><a href="/my"${active === 'my' ? ' aria-current="page"' : ''}>내 민원</a></li><li><a href="/my/profile">내 정보</a></li><li><a href="/logout">로그아웃</a></li>`
     : `<li><a href="/login"${active === 'login' ? ' aria-current="page"' : ''}>로그인</a></li><li><a href="/signup"${active === 'signup' ? ' aria-current="page"' : ''}>회원가입</a></li>`}</ul>
     <button type="button" class="btn small" data-font-toggle aria-pressed="false">글자 크게</button>
   </div>
-  <div class="wrap">
-    <a class="brand" href="/"><span class="org">${esc(ctx.orgName)}</span> 행정누리 전자민원</a>
+  <div class="wrap navrow">
     <nav aria-label="주 메뉴"><ul>${nav}</ul></nav>
+  </div>
   </div>
 </header>
 <main id="main" class="wrap">
@@ -58,7 +75,7 @@ ${body}
 <footer class="site">
   <div class="wrap">
     <p><a href="/guide">민원 안내</a> · <a href="/stats">처리 통계</a> · <a href="/terms">이용약관</a> · <a href="/privacy"><strong>개인정보 처리방침</strong></a></p>
-    <p>${esc(ctx.orgName)} · 문의 ${esc(ctx.orgContact)}</p>
+    <p>${esc(ctx.orgName)} · 문의 ${telLinks(ctx.orgContact)}</p>
     <p>법정민원(구비서류·수수료가 있는 민원)은 <a href="https://www.gov.kr" rel="noopener noreferrer">정부24</a> 또는 기관 민원 창구에서 신청하세요.</p>
   </div>
 </footer>
@@ -248,8 +265,9 @@ function complaintDone(ctx, data) {
   return layout(ctx, '접수 완료', `
 <h1>민원이 접수되었습니다</h1>
 <div class="receipt" role="status">
+  <p class="sr-only" aria-live="polite" data-copy-status></p>
   <dl>
-    <dt>접수번호</dt><dd class="big">${esc(data.receiptNo)}</dd>
+    <dt>접수번호</dt><dd><span class="big">${esc(data.receiptNo)}</span> <button type="button" class="btn small copy-btn no-print" data-copy="${esc(data.receiptNo)}" aria-label="접수번호 ${esc(data.receiptNo)} 복사">복사</button></dd>
     <dt>민원 종류</dt><dd>${esc(data.kindLabel)}</dd>
     <dt>접수 일시</dt><dd>${dt(data.receivedAt)}</dd>
     <dt>처리기한</dt><dd>${dt(data.deadlineAt)}</dd>
@@ -422,14 +440,14 @@ function consultationList(ctx, data, q, filter = {}) {
   const sortOpts = SORTS.map(([k, label]) => `<option value="${k}"${(filter.sort || 'recent') === k ? ' selected' : ''}>${label}</option>`).join('');
   const extra = `${filter.kind ? `&amp;kind=${encodeURIComponent(filter.kind)}` : ''}${filter.category ? `&amp;category=${encodeURIComponent(filter.category)}` : ''}${filter.sort && filter.sort !== 'recent' ? `&amp;sort=${encodeURIComponent(filter.sort)}` : ''}`;
   const rows = items.map((it) => `<tr>
-  <td>${esc(it.receiptNo)}</td>
-  <td>${esc(it.kindLabel)}${it.categoryLabel ? `<br><small>${esc(it.categoryLabel)}</small>` : ''}</td>
-  <td class="title"><a href="/consultations/${encodeURIComponent(String(it.id))}">${esc(it.title)}</a></td>
-  <td>${esc(it.name)}</td>
-  <td>${esc(it.dept)}</td>
-  <td>${dt(it.completedAt)}</td>
-  <td class="num">${esc(it.views ?? 0)}</td>
-  <td class="num">${esc(it.likes ?? 0)}</td>
+  <td class="title" data-label="제목"><a href="/consultations/${encodeURIComponent(String(it.id))}">${esc(it.title)}</a></td>
+  <td data-label="접수번호">${esc(it.receiptNo)}</td>
+  <td data-label="종류·분야">${esc(it.kindLabel)}${it.categoryLabel ? ` · ${esc(it.categoryLabel)}` : ''}</td>
+  <td data-label="신청인">${esc(it.name)}</td>
+  <td data-label="담당 부서">${esc(it.dept) || '-'}</td>
+  <td data-label="처리 완료">${dt(it.completedAt)}</td>
+  <td class="num" data-label="조회">${esc(it.views ?? 0)}</td>
+  <td class="num" data-label="공감">${esc(it.likes ?? 0)}</td>
 </tr>`).join('');
   return layout(ctx, '공개 상담', `
 <h1>공개 상담</h1>
@@ -443,8 +461,8 @@ function consultationList(ctx, data, q, filter = {}) {
   <button type="submit" class="btn">찾기</button>
 </form>
 <p class="count">모두 ${esc(data.total ?? 0)}건${q ? ` · “${esc(q)}” 검색 결과` : ''}</p>
-${items.length ? `<div class="table-wrap"><table class="list">
-<thead><tr><th scope="col">접수번호</th><th scope="col">종류·분야</th><th scope="col">제목</th><th scope="col">신청인</th><th scope="col">담당 부서</th><th scope="col">처리 완료</th><th scope="col">조회</th><th scope="col">공감</th></tr></thead>
+${items.length ? `<div class="table-wrap"><table class="list stack">
+<thead><tr><th scope="col">제목</th><th scope="col">접수번호</th><th scope="col">종류·분야</th><th scope="col">신청인</th><th scope="col">담당 부서</th><th scope="col">처리 완료</th><th scope="col">조회</th><th scope="col">공감</th></tr></thead>
 <tbody>${rows}</tbody></table></div>` : '<p class="empty">찾은 상담이 없습니다.</p>'}
 ${pager('/consultations', data, q, extra)}`, 'consult');
 }
@@ -474,24 +492,24 @@ function dispositionList(ctx, data, q) {
   const period = (it) => (it.startDate || it.endDate) ? `${esc(it.startDate || '')} ~ ${esc(it.endDate || '')}` : '-';
   const amount = (a) => (a === null || a === undefined || a === '') ? '-' : `${esc(Number(a).toLocaleString('ko-KR'))}원`;
   const rows = items.map((it) => `<tr>
-  <td>${esc(it.decidedOn)}</td>
-  <td>${esc(it.bizName)}</td>
-  <td>${esc(it.bizType)}</td>
-  <td>${esc(it.address)}</td>
-  <td>${esc(it.law)}</td>
-  <td>${esc(it.kind)}</td>
-  <td>${period(it)}</td>
-  <td>${amount(it.amount)}</td>
-  <td>${esc(it.violation)}</td>
-  <td>${esc(it.basis)}</td>
+  <td class="title" data-label="업소명">${esc(it.bizName)}</td>
+  <td data-label="처분일">${esc(it.decidedOn)}</td>
+  <td data-label="업종">${esc(it.bizType)}</td>
+  <td data-label="소재지">${esc(it.address)}</td>
+  <td data-label="근거 법률">${esc(it.law)}</td>
+  <td data-label="처분 종류">${esc(it.kind)}</td>
+  <td data-label="처분 기간">${period(it)}</td>
+  <td data-label="금액">${amount(it.amount)}</td>
+  <td data-label="위반 내용">${esc(it.violation)}</td>
+  <td data-label="처분 근거">${esc(it.basis)}</td>
 </tr>`).join('');
   return layout(ctx, '행정처분 공개', `
 <h1>행정처분 공개</h1>
 <p class="hint">식품위생법·공중위생관리법 위반 업소 가운데 공개하기로 한 유효한 처분을 처분일부터 1년 동안 공개합니다.</p>
 ${searchBox('/dispositions', q, '상호 또는 주소 검색')}
 <p class="count">모두 ${esc(data.total ?? 0)}건${q ? ` · “${esc(q)}” 검색 결과` : ''}</p>
-${items.length ? `<div class="table-wrap"><table class="list wide">
-<thead><tr><th scope="col">처분일</th><th scope="col">업소명</th><th scope="col">업종</th><th scope="col">소재지</th><th scope="col">근거 법률</th><th scope="col">처분 종류</th><th scope="col">처분 기간</th><th scope="col">금액</th><th scope="col">위반 내용</th><th scope="col">처분 근거</th></tr></thead>
+${items.length ? `<div class="table-wrap"><table class="list wide stack">
+<thead><tr><th scope="col">업소명</th><th scope="col">처분일</th><th scope="col">업종</th><th scope="col">소재지</th><th scope="col">근거 법률</th><th scope="col">처분 종류</th><th scope="col">처분 기간</th><th scope="col">금액</th><th scope="col">위반 내용</th><th scope="col">처분 근거</th></tr></thead>
 <tbody>${rows}</tbody></table></div>` : '<p class="empty">공개된 행정처분이 없습니다.</p>'}
 ${pager('/dispositions', data, q)}`, 'disp');
 }
@@ -506,7 +524,7 @@ function errorPage(ctx, status, title, message) {
 }
 
 module.exports = {
-  esc, dt, layout, home, complaintForm, complaintDone, lookupForm, lookupResult, ownerActions, complaintDetail,
+  esc, dt, layout, telLinks, home, complaintForm, complaintDone, lookupForm, lookupResult, ownerActions, complaintDetail,
   fieldError, aria, errorSummary, captchaField, searchBox, pager, statusBadge,
   consultationList, consultationDetail, dispositionList, errorPage,
 };

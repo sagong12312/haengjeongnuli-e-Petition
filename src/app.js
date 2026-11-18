@@ -26,6 +26,11 @@ const MAX_MULTIPART_BYTES = 16 * 1024 * 1024;
 const STATIC = {
   '/static/style.css': { file: path.join(__dirname, '..', 'public', 'style.css'), type: 'text/css; charset=utf-8' },
   '/static/app.js': { file: path.join(__dirname, '..', 'public', 'app.js'), type: 'text/javascript; charset=utf-8' },
+  '/static/icon.svg': { file: path.join(__dirname, '..', 'public', 'icon.svg'), type: 'image/svg+xml' },
+  '/static/icon-180.png': { file: path.join(__dirname, '..', 'public', 'icon-180.png'), type: 'image/png' },
+  '/static/icon-192.png': { file: path.join(__dirname, '..', 'public', 'icon-192.png'), type: 'image/png' },
+  '/static/icon-512.png': { file: path.join(__dirname, '..', 'public', 'icon-512.png'), type: 'image/png' },
+  '/favicon.ico': { file: path.join(__dirname, '..', 'public', 'icon-192.png'), type: 'image/png' },
   '/robots.txt': {
     body: 'User-agent: *\nDisallow: /lookup\nDisallow: /complaints\nDisallow: /captcha/\nDisallow: /my\nDisallow: /login\nDisallow: /signup\nDisallow: /logout\n',
     type: 'text/plain; charset=utf-8',
@@ -328,6 +333,19 @@ function createApp({ config, nuri, logger = console, captcha, limits = {}, sessi
       if (p === '/') return home(req, res, ip);
       if (p === '/healthz') { res.setHeader('Content-Type', 'text/plain'); return res.end('ok'); }
       if (STATIC[p]) return serveStatic(res, STATIC[p]);
+      if (p === '/manifest.webmanifest') {
+        // 휴대폰 '홈 화면에 추가' 때 쓰는 이름·아이콘 (개인정보 없음)
+        res.setHeader('Content-Type', 'application/manifest+json; charset=utf-8');
+        return res.end(JSON.stringify({
+          name: `${ctx.orgName} 행정누리 전자민원`, short_name: '전자민원', lang: 'ko', start_url: '/', scope: '/',
+          display: 'standalone', background_color: '#f5f7fb', theme_color: '#0f1f45',
+          icons: [
+            { src: '/static/icon-192.png', sizes: '192x192', type: 'image/png' },
+            { src: '/static/icon-512.png', sizes: '512x512', type: 'image/png' },
+            { src: '/static/icon.svg', sizes: 'any', type: 'image/svg+xml' },
+          ],
+        }));
+      }
       if (p === '/complaints/new') return newComplaint(req, res, ip);
       if (p === '/lookup') return showLookupForm(req, res);
       if (p === '/consultations') return consultations(req, res, ip, url);

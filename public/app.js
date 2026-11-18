@@ -7,6 +7,44 @@
  *   24시간이 지나거나 접수되면 지웁니다. 서버로 보내지 않습니다.
  */
 (function () {
+  // 스크립트가 도는 것을 CSS 에 알린다 (휴대폰 메뉴를 접는 것은 이때만)
+  document.documentElement.classList.add('js');
+
+  // 휴대폰 메뉴 펼치기·접기
+  document.addEventListener('click', function (ev) {
+    var b = ev.target && ev.target.closest && ev.target.closest('[data-menu-toggle]');
+    if (!b) return;
+    var header = b.closest('header');
+    var open = !header.classList.contains('nav-open');
+    header.classList.toggle('nav-open', open);
+    b.setAttribute('aria-expanded', open ? 'true' : 'false');
+    b.textContent = open ? '닫기' : '메뉴';
+    if (open) {
+      var first = header.querySelector('.menu-panel a');
+      if (first) first.focus();
+    }
+  });
+  document.addEventListener('keydown', function (ev) {
+    if (ev.key !== 'Escape') return;
+    var h = document.querySelector('header.site.nav-open');
+    if (!h) return;
+    h.classList.remove('nav-open');
+    var b = h.querySelector('[data-menu-toggle]');
+    b.setAttribute('aria-expanded', 'false');
+    b.textContent = '메뉴';
+    b.focus();
+  });
+
+  // 접수번호 복사
+  document.addEventListener('click', function (ev) {
+    var b = ev.target && ev.target.closest && ev.target.closest('[data-copy]');
+    if (!b || !navigator.clipboard) return;
+    navigator.clipboard.writeText(b.getAttribute('data-copy')).then(function () {
+      var s = document.querySelector('[data-copy-status]');
+      if (s) s.textContent = '접수번호를 복사했습니다.';
+    }, function () { /* 복사를 못 하면 그냥 둔다 */ });
+  });
+
   var store = null;
   try { store = window.localStorage; store.getItem('x'); } catch (e) { store = null; }
   function get(k) { try { return store ? store.getItem(k) : null; } catch (e) { return null; } }
