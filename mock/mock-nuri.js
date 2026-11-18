@@ -414,6 +414,9 @@ function createMockNuri({
       members.set(mem.memberId, mem);
       return ok(res, memberView(mem));
     }
+    if (P && p === '/members/login' && b.loginId === 'blocked_ip') {
+      return fail(res, 429, 'too_many_attempts', '로그인을 여러 번 틀렸습니다. 10분 뒤 다시 시도해 주세요.');
+    }
     if (P && p === '/members/login') {
       const mem = [...members.values()].find((x) => x.loginId === b.loginId);
       if (!mem) return fail(res, 401, 'not_matched', '아이디 또는 비밀번호가 맞지 않습니다.');

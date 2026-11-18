@@ -185,6 +185,9 @@ function createPortalRoutes(h) {
     } catch (e) {
       if (e instanceof NuriApiError) {
         if (e.code === 'locked') return showLogin(req, res, 423, form, {}, e.publicMessage || '잠시 로그인할 수 없습니다.', next);
+        if (e.code === 'too_many_attempts') {
+          return showLogin(req, res, 429, form, {}, e.publicMessage || '로그인을 여러 번 틀렸습니다. 잠시 뒤 다시 시도해 주세요.', next);
+        }
         return showLogin(req, res, 401, form, {}, '아이디 또는 비밀번호가 맞지 않습니다.', next);
       }
       throw e;
@@ -301,7 +304,8 @@ function createPortalRoutes(h) {
       }
       throw e;
     }
-    // 비밀번호를 바꾸면 세션 번호도 새로 (다른 곳에서 훔친 세션은 못 쓰게)
+    // 비밀번호를 바꾸면 다른 기기의 로그인을 끊고, 이 기기도 세션 번호를 새로 (훔친 세션은 못 쓰게)
+    sessions.destroyMember(req.member.memberId);
     sessions.create(req, res, { memberId: req.member.memberId, loginId: req.member.loginId, name: req.member.name });
     redirect(res, '/my/profile?pw=1');
   }
@@ -328,6 +332,7 @@ function createPortalRoutes(h) {
       if (e instanceof NuriApiError) return again(400, { password: e.publicMessage || '탈퇴하지 못했습니다.' });
       throw e;
     }
+    sessions.destroyMember(req.member.memberId);
     sessions.destroy(req, res);
     send(res, 200, pv.actionDone({ ...rc(req), member: null }, { title: '탈퇴했습니다', back: '/',
       message: '회원 정보를 지웠습니다. 그동안 이용해 주셔서 고맙습니다.' }).replace('처리상황 다시 조회', '첫 화면으로'));

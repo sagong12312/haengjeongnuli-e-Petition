@@ -2,8 +2,9 @@
 /*
  * 화면 편의 기능 (없어도 모든 기능은 그대로 쓸 수 있습니다)
  * - 인쇄 버튼, 글자 크게 (이 브라우저에 기억)
- * - 민원 신청서 임시저장: 쓰는 중인 글을 이 브라우저(localStorage)에만 저장합니다.
- *   서버로 보내지 않으며, 비밀번호·자동입력 방지 숫자·첨부파일은 저장하지 않습니다. 접수되면 지웁니다.
+ * - 민원 신청서 임시저장: 쓰는 중인 민원 종류·분야·제목·내용만 이 브라우저(localStorage)에 저장합니다.
+ *   여러 사람이 쓰는 PC를 생각해 이름·연락처·주소·비밀번호·첨부파일은 저장하지 않으며,
+ *   24시간이 지나거나 접수되면 지웁니다. 서버로 보내지 않습니다.
  */
 (function () {
   var store = null;
@@ -37,7 +38,10 @@
   });
 
   // 신청서 임시저장
+  // 저장하는 칸 (개인정보가 아닌 것만)
+  var KEEP = { kind: 1, category: 1, lawInterpretation: 1, title: 1, content: 1 };
   var SKIP = { password: 1, password2: 1, captcha: 1, captchaId: 1, _csrf: 1, files: 1 };
+  var MAX_AGE = 24 * 3600 * 1000;
   var form = document.querySelector('form[data-draft]');
   if (form) {
     var key = 'ep-draft-' + form.getAttribute('data-draft');
@@ -45,10 +49,11 @@
     var hasError = !!document.querySelector('.alert-error');
     var saved = null;
     try { saved = JSON.parse(get(key) || 'null'); } catch (e) { saved = null; }
+    if (saved && (!saved.at || Date.now() - saved.at > MAX_AGE)) { del(key); saved = null; }
     if (saved && !hasError && saved.v) {
       var used = false;
       Object.keys(saved.v).forEach(function (name) {
-        if (SKIP[name]) return;
+        if (SKIP[name] || !KEEP[name]) return;
         var els = form.elements[name];
         if (!els) return;
         var list = els.length !== undefined && !els.tagName ? els : [els];
@@ -67,7 +72,7 @@
       var v = {};
       for (var i = 0; i < form.elements.length; i++) {
         var el = form.elements[i];
-        if (!el.name || SKIP[el.name] || el.type === 'hidden' || el.type === 'file') continue;
+        if (!el.name || SKIP[el.name] || !KEEP[el.name] || el.type === 'hidden' || el.type === 'file') continue;
         if (el.type === 'radio' || el.type === 'checkbox') { if (el.checked) v[el.name] = el.value; continue; }
         if (el.value) v[el.name] = el.value;
       }

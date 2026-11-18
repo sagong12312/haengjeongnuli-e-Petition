@@ -263,3 +263,54 @@ test('세션: 오래 쓰지 않으면 로그아웃', async () => {
   t = 3000; assert.equal(store.get(req), null);
   store.close();
 });
+
+test('세션: 상한을 넘으면 오래된 것부터 지우고, 회원의 다른 기기 세션을 끊는다', () => {
+  const { SessionStore } = require('../src/session');
+  let t = 0;
+  const store = new SessionStore({ max: 10, now: () => t });
+  const res = () => { const h = {}; return { getHeader: (k) => h[k], setHeader: (k, v) => { h[k] = v; } }; };
+  const ids = [];
+  for (let i = 0; i < 12; i++) { t += 1; ids.push(store.create({ headers: {} }, res(), { memberId: i % 3, name: 'x' })); }
+  assert.ok(store.sessions.size <= 10, `세션 ${store.sessions.size}개`);
+  assert.equal(store.get({ headers: { cookie: `ep_sid=${ids[0]}` } }), null, '가장 오래된 세션은 지워짐');
+  const keep = { headers: { cookie: `ep_sid=${ids[11]}` } };
+  const before = [...store.sessions.values()].filter((s) => s.memberId === 2).length;
+  assert.ok(before >= 2);
+  store.destroyMember(2, keep);
+  assert.equal([...store.sessions.values()].filter((s) => s.memberId === 2).length, 1, '지금 기기만 남음');
+  store.destroyMember(2);
+  assert.equal([...store.sessions.values()].filter((s) => s.memberId === 2).length, 0);
+  store.close();
+});
+
+test('회원: 비밀번호를 바꾸면 다른 기기 로그인이 끊기고, IP 제한(429)은 따로 안내', async (t) => {
+  const s = await startStack({ limits: { signup: { limit: 100, windowMs: 60000 }, login: { limit: 100, windowMs: 60000 } } });
+  t.after(() => s.close());
+  const pc = makeAgent(s.url);
+  let f = await open(s, pc, '/signup');
+  await pc('POST', '/signup', { ...member, _csrf: f.csrf, captchaId: f.captchaId, captcha: f.captcha });
+  const phone = makeAgent(s.url);
+  f = await open(s, phone, '/login');
+  let r = await phone('POST', '/login', { _csrf: f.csrf, loginId: member.loginId, password: member.password, next: '' });
+  assert.equal(r.status, 303);
+  assert.equal((await phone('GET', '/my')).status, 200);
+  f = await open(s, pc, '/my/password');
+  r = await pc('POST', '/my/password', { _csrf: f.csrf, currentPassword: member.password, password: 'New-River-2026', password2: 'New-River-2026' });
+  assert.equal(r.status, 303);
+  assert.equal((await phone('GET', '/my')).status, 303, '다른 기기는 로그아웃');
+  assert.equal((await pc('GET', '/my')).status, 200, '바꾼 기기는 그대로');
+  const other = makeAgent(s.url);
+  f = await open(s, other, '/login');
+  r = await other('POST', '/login', { _csrf: f.csrf, loginId: 'blocked_ip', password: 'x', next: '' });
+  assert.equal(r.status, 429);
+  assert.match(r.text, /여러 번 틀렸습니다/);
+});
+
+test('임시저장 스크립트는 이름·연락처를 저장하지 않는다', () => {
+  const js = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'public', 'app.js'), 'utf8');
+  const keep = /var KEEP = \{([^}]*)\}/.exec(js)[1];
+  for (const field of ['name', 'mobile', 'email', 'address', 'homePhone', 'fax', 'password']) {
+    assert.ok(!new RegExp(`\\b${field}\\s*:`).test(keep), `${field} 는 저장하면 안 됨`);
+  }
+  assert.match(js, /MAX_AGE = 24 \* 3600 \* 1000/);
+});
