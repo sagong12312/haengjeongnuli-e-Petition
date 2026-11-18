@@ -365,6 +365,7 @@ function createMockNuri({
       n.views += 1;
       return ok(res, n);
     }
+    if (G && p === '/security-apps') return ok(res, { items: securityApps.filter((a) => a.use) });
     if (G && p === '/faqs') {
       const groups = new Map();
       for (const f of faqs) { if (!groups.has(f.category)) groups.set(f.category, []); groups.get(f.category).push({ id: f.id, question: f.question, answer: f.answer }); }
@@ -478,6 +479,12 @@ function createMockNuri({
     notices.push(n);
     return n;
   }
+  const securityApps = [];
+  function addSecurityApp(a) {
+    const app = { id: securityApps.length + 1, version: 1, use: true, required: false, purpose: '', guide: '', url: null, checkUrl: null, ...a };
+    securityApps.push(app);
+    return app;
+  }
   function addFaq(category, question, answer) {
     faqs.push({ id: faqs.length + 1, category, question, answer });
   }
@@ -486,7 +493,7 @@ function createMockNuri({
     addFaq('민원 신청', '첨부파일은 몇 개까지 붙일 수 있나요?', '3개까지, 하나에 5MB까지입니다.');
   }
 
-  return { handler, complaints, complete, accessLog, dispositions, notices, faqs, members, addNotice, addFaq };
+  return { handler, complaints, complete, accessLog, dispositions, notices, faqs, members, addNotice, addFaq, securityApps, addSecurityApp };
 }
 
 if (require.main === module) {

@@ -166,3 +166,28 @@
   input.addEventListener('change', look);
   if (input.value) look();
 })();
+
+// 보안 프로그램: 설치 확인 주소가 있으면 이 PC 에서 프로그램이 응답하는지 본 뒤에만 '설치했습니다'를 보낸다
+(function () {
+  var forms = document.querySelectorAll('form[data-check-url]');
+  Array.prototype.forEach.call(forms, function (form) {
+    var url = form.getAttribute('data-check-url');
+    var checked = false;
+    form.addEventListener('submit', function (e) {
+      if (checked || !window.fetch) return;
+      e.preventDefault();
+      var btn = form.querySelector('button');
+      if (btn) { btn.disabled = true; btn.textContent = '설치 확인 중…'; }
+      var done = false;
+      function fail() {
+        if (done) return; done = true;
+        if (btn) { btn.disabled = false; btn.textContent = '설치했습니다'; }
+        alert((form.getAttribute('data-check-name') || '보안 프로그램') + '이(가) 이 기기에서 실행 중이 아닙니다. 설치하고 실행한 뒤 다시 눌러 주세요.');
+      }
+      var timer = setTimeout(fail, 4000);
+      fetch(url, { mode: 'no-cors', cache: 'no-store', credentials: 'omit' })
+        .then(function () { if (done) return; done = true; clearTimeout(timer); checked = true; form.submit(); })
+        .catch(function () { clearTimeout(timer); fail(); });
+    });
+  });
+})();

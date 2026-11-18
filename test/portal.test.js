@@ -379,3 +379,45 @@ test('전자민원 개선: 비슷한 공개 상담, FAQ 검색, 새 글, 처리 
   r = await agent('GET', `/my/complaints/${first.receiptNo}`);
   assert.match(r.text, /class="stage"/);
 });
+
+test('보안 프로그램: 강제는 설치를 확인해야 쓸 수 있고 권고는 막지 않는다', async (t) => {
+  const s = await startStack();
+  t.after(() => s.close());
+  const agent = makeAgent(s.url);
+  // 권고만 있으면 막지 않는다
+  s.mock.addSecurityApp({ name: '권고 백신', purpose: '악성코드 검사', required: false });
+  s.app.secApps.forget();
+  assert.equal((await agent('GET', '/complaints/new')).status, 200);
+
+  const force = s.mock.addSecurityApp({ name: '키보드 보안', purpose: '입력 내용 보호', required: true, url: 'https://dist.example.go.kr/kb', checkUrl: 'http://127.0.0.1:14440/status' });
+  s.mock.addSecurityApp({ name: '나쁜 주소', purpose: 'x', required: false, url: 'javascript:alert(1)', checkUrl: 'https://evil.example.com/' });
+  s.app.secApps.forget();
+  let r = await agent('GET', '/complaints/new?kind=QUERY');
+  assert.equal(r.status, 303);
+  assert.equal(r.headers.get('location'), '/security-programs?next=%2Fcomplaints%2Fnew%3Fkind%3DQUERY');
+  r = await agent('POST', '/lookup', { receiptNo: '2026-000001', password: 'abc12345' });
+  assert.equal(r.status, 403);
+  // 약관·정적 파일은 그대로
+  assert.equal((await agent('GET', '/privacy')).status, 200);
+
+  const page = await agent('GET', '/security-programs?next=%2Fcomplaints%2Fnew%3Fkind%3DQUERY');
+  assert.equal(page.status, 200);
+  assert.match(page.text, /강제<\/span>/);
+  assert.match(page.text, /data-check-url="http:\/\/127\.0\.0\.1:14440\/status"/);
+  assert.ok(!page.text.includes('javascript:alert'), '위험한 내려받기 주소는 버린다');
+  assert.ok(!page.text.includes('evil.example.com'), '이 PC 가 아닌 확인 주소는 버린다');
+  assert.match(page.headers.get('content-security-policy'), /connect-src 'self' http:\/\/127\.0\.0\.1:14440/);
+  // 다른 화면에는 확인 주소를 열어 주지 않는다
+  assert.ok(!(await agent('GET', '/privacy')).headers.get('content-security-policy').includes('14440'));
+
+  const csrf = hidden(page.text, '_csrf');
+  r = await agent('POST', '/security-programs', { _csrf: csrf, id: String(force.id), next: '//evil.example.com' });
+  assert.equal(r.status, 303);
+  assert.equal(r.headers.get('location'), '/', '다른 사이트로는 넘기지 않는다');
+  assert.equal((await agent('GET', '/complaints/new')).status, 200);
+
+  // 새 판이 나오면 다시 확인해야 한다
+  force.version = 2;
+  s.app.secApps.forget();
+  assert.equal((await agent('GET', '/complaints/new')).status, 303);
+});

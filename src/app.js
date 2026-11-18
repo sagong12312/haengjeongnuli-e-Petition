@@ -12,13 +12,14 @@ const path = require('node:path');
 const views = require('./views');
 const { validateComplaintForm, validateLookupForm, parseListQuery, CATEGORIES } = require('./validation');
 const {
-  setSecurityHeaders, isSecure, isLoopback, clientIp, RateLimiter, csrfToken, verifyCsrf, CaptchaStore,
+  CSP, parseCookies, setSecurityHeaders, isSecure, isLoopback, clientIp, RateLimiter, csrfToken, verifyCsrf, CaptchaStore,
 } = require('./security');
 const { NuriApiError } = require('./nuriClient');
 const { parseMultipart } = require('./multipart');
 const { checkAttachments } = require('./attachments');
 const { SessionStore } = require('./session');
 const { createPortalRoutes } = require('./portalRoutes');
+const secapps = require('./secapps');
 
 const MAX_FORM_BYTES = 256 * 1024;
 /** 민원 신청(첨부 5MB × 3개 + 글)만 더 크게 받는다 */
@@ -119,6 +120,7 @@ function createApp({ config, nuri, logger = console, captcha, limits = {}, sessi
     action: new RateLimiter(limits.action || { limit: 30, windowMs: 10 * 60_000 }),
   };
   const sessions = sessionStore || new SessionStore({ cookieSecure: config.cookieSecure });
+  const secApps = secapps.createSecApps({ nuri, logger });
   /** 화면에 넘길 값: 로그인했으면 회원 이름도 */
   const rc = (req) => (req && req.member ? { ...ctx, member: req.member } : ctx);
   function redirect(res, location) {
@@ -367,6 +369,37 @@ function createApp({ config, nuri, logger = console, captcha, limits = {}, sessi
     res.end(req.method === 'HEAD' ? undefined : c.raw);
   }
 
+  /* -------------------------------------------------------------- 보안 프로그램 */
+
+  async function securityPrograms(req, res, ip, url) {
+    if (!limiters.read.take(ip)) return tooMany(res, limiters.read, ip);
+    const items = await secApps.list(ip);
+    if (req.method === 'POST') {
+      const form = await readForm(req);
+      if (!verifyCsrf(req, form._csrf)) {
+        return send(res, 403, views.errorPage(ctx, 403, '요청을 처리할 수 없습니다', '화면을 새로 고친 뒤 다시 해 주세요.'));
+      }
+      const item = items.find((a) => a.id === String(form.id || ''));
+      const next = secapps.safeNext(form.next);
+      if (item) secApps.setAck(req, res, parseCookies, item, config.cookieSecure);
+      // 쿠키는 다음 요청부터 보이므로 남은 강제 항목은 방금 확인한 것을 빼고 센다
+      const done = secApps.acked(req, parseCookies);
+      if (item) done.add(`${item.id}.${item.version}`);
+      const left = items.filter((a) => a.required && !done.has(`${a.id}.${a.version}`));
+      return redirect(res, left.length ? `/security-programs?next=${encodeURIComponent(next)}&ok=1` : next);
+    }
+    if (req.method !== 'GET' && req.method !== 'HEAD') return notFound(res);
+    const done = secApps.acked(req, parseCookies);
+    const origins = secApps.checkOrigins(items);
+    // 이 화면에서만 설치 확인 주소(이 PC)에 물어볼 수 있게 한다
+    if (origins.length) res.setHeader('Content-Security-Policy', `${CSP}; connect-src 'self' ${origins.join(' ')}`);
+    send(res, 200, secapps.page(rc(req), {
+      items, done, csrf: csrfToken(req, res, config.cookieSecure), next: secapps.safeNext(url.searchParams.get('next')),
+      blocked: items.some((a) => a.required && !done.has(`${a.id}.${a.version}`)),
+      message: url.searchParams.get('ok') === '1' ? '설치를 확인했습니다.' : '',
+    }));
+  }
+
   /* -------------------------------------------------------------- 라우터 */
 
   async function route(req, res) {
@@ -393,6 +426,19 @@ function createApp({ config, nuri, logger = console, captcha, limits = {}, sessi
     const sess = sessions.get(req);
     req.session = sess;
     req.member = sess ? { memberId: sess.memberId, loginId: sess.loginId, name: sess.name } : null;
+
+    // 강제 보안 프로그램을 설치하지 않았으면 설치 안내로 보낸다 (안내·약관·정적 파일은 그대로)
+    const open = p === '/security-programs' || p === '/healthz' || p === '/robots.txt' || p === '/manifest.webmanifest'
+      || p === '/terms' || p === '/privacy' || STATIC[p] || p.startsWith('/captcha/');
+    if (!open) {
+      const missing = await secApps.missing(req, ip, parseCookies);
+      if (missing.length) {
+        if (m === 'GET' || m === 'HEAD') return redirect(res, `/security-programs?next=${encodeURIComponent(secapps.safeNext(p + url.search))}`);
+        return send(res, 403, views.errorPage(ctx, 403, '보안 프로그램 설치가 필요합니다',
+          '강제 보안 프로그램을 설치해야 신청·조회를 할 수 있습니다. 보안 프로그램 설치 화면(/security-programs)에서 설치한 뒤 다시 해 주세요.'));
+      }
+    }
+    if (p === '/security-programs') return securityPrograms(req, res, ip, url);
 
     if (m === 'GET' || m === 'HEAD') {
       if (p === '/') return home(req, res, ip);
@@ -467,6 +513,7 @@ function createApp({ config, nuri, logger = console, captcha, limits = {}, sessi
   };
   handler.sessions = sessions;
   handler.captchas = captchas;
+  handler.secApps = secApps;
   return handler;
 }
 

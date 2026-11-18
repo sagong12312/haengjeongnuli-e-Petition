@@ -239,5 +239,6 @@ class CaptchaStore {
 }
 
 module.exports = {
+  CSP,
   setSecurityHeaders, isSecure, isLoopback, clientIp, RateLimiter, parseCookies, csrfToken, verifyCsrf, CaptchaStore, renderCaptchaSvg,
 };

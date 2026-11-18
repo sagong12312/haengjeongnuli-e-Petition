@@ -159,6 +159,7 @@ function createNuriClient({ baseUrl, secret, timeoutMs = 10000, ca, logger = con
     listNotices(page, q, clientIp) { return request('GET', '/notices' + pageQuery(page, q), undefined, clientIp); },
     getNotice(id, clientIp) { return request('GET', `/notices/${encodeURIComponent(String(id))}`, undefined, clientIp); },
     faqs(clientIp) { return request('GET', '/faqs', undefined, clientIp); },
+    securityApps(clientIp) { return request('GET', '/security-apps', undefined, clientIp); },
 
     /* ---------------- 민원인이 하는 일 (조회 때 받은 actionToken) */
     withdraw(token, reason, clientIp) { return request('POST', '/complaints/withdraw', { token, reason }, clientIp); },
