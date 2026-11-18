@@ -17,8 +17,24 @@ const CSP = [
   "object-src 'none'",
 ].join('; ');
 
-function setSecurityHeaders(res) {
-  res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+/** 이 요청이 암호화된 연결(HTTPS)로 왔는지. 앞단 프록시를 믿기로 했으면 그 프록시가 붙인 X-Forwarded-Proto 를 본다 */
+function isSecure(req, trustProxy) {
+  if (req.socket && req.socket.encrypted) return true;
+  if (trustProxy) {
+    const xfp = String(req.headers['x-forwarded-proto'] || '').split(',').pop().trim().toLowerCase();
+    return xfp === 'https';
+  }
+  return false;
+}
+
+/** 같은 PC 안에서 온 연결인지 (프록시를 거치지 않은 소켓 주소로만 판단) */
+function isLoopback(req) {
+  const a = String((req.socket && req.socket.remoteAddress) || '');
+  return a === '127.0.0.1' || a === '::1' || a === '::ffff:127.0.0.1';
+}
+
+function setSecurityHeaders(res, secure = true) {
+  if (secure) res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
   res.setHeader('Cache-Control', 'no-store');
   res.setHeader('Pragma', 'no-cache');
   res.setHeader('Content-Security-Policy', CSP);
@@ -223,5 +239,5 @@ class CaptchaStore {
 }
 
 module.exports = {
-  setSecurityHeaders, clientIp, RateLimiter, parseCookies, csrfToken, verifyCsrf, CaptchaStore, renderCaptchaSvg,
+  setSecurityHeaders, isSecure, isLoopback, clientIp, RateLimiter, parseCookies, csrfToken, verifyCsrf, CaptchaStore, renderCaptchaSvg,
 };

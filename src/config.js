@@ -43,7 +43,14 @@ function loadConfig(env = process.env) {
   }
 
   let tls;
-  if (env.TLS_CERT_FILE || env.TLS_KEY_FILE) {
+  if (env.TLS_PFX_FILE) {
+    // 행정누리 켜기 스크립트가 keytool 로 만든 PKCS12(.p12) 인증서를 그대로 쓴다
+    try {
+      tls = { pfx: fs.readFileSync(env.TLS_PFX_FILE), passphrase: env.TLS_PFX_PASSPHRASE || '' };
+    } catch {
+      errors.push('TLS_PFX_FILE 을 읽을 수 없습니다.');
+    }
+  } else if (env.TLS_CERT_FILE || env.TLS_KEY_FILE) {
     try {
       tls = { cert: fs.readFileSync(env.TLS_CERT_FILE), key: fs.readFileSync(env.TLS_KEY_FILE) };
     } catch {
@@ -66,6 +73,8 @@ function loadConfig(env = process.env) {
     port: int(env.PORT, 8080),
     tls,
     trustProxy: bool(env.TRUST_PROXY, false),
+    // 암호화되지 않은(http) 연결은 같은 PC(127.0.0.1)에서 온 것만 받는다. 와이파이·인터넷에서 오는 http 는 막는다.
+    requireHttps: bool(env.REQUIRE_HTTPS, true),
     cookieSecure: bool(env.COOKIE_SECURE, true),
     orgName: env.ORG_NAME || '○○기관',
     orgContact: env.ORG_CONTACT || '기관 민원실',

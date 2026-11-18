@@ -4,6 +4,20 @@
  */
 const { KINDS, CATEGORIES, NOTIFY_METHODS } = require('./validation');
 
+/** 정적 파일 주소 뒤에 내용 지문(?v=)을 붙여, 휴대폰이 한 번 받은 파일을 다시 받지 않게 한다 (파일이 바뀌면 주소도 바뀜) */
+const ASSET_V = (() => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const crypto = require('node:crypto');
+  const v = {};
+  for (const f of ['style.css', 'app.js']) {
+    try {
+      v[f] = crypto.createHash('sha256').update(fs.readFileSync(path.join(__dirname, '..', 'public', f))).digest('hex').slice(0, 10);
+    } catch { v[f] = '0'; }
+  }
+  return v;
+})();
+
 function esc(v) {
   if (v === null || v === undefined) return '';
   return String(v)
@@ -47,8 +61,8 @@ function layout(ctx, title, body, active = '') {
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/static/icon-180.png">
-<link rel="stylesheet" href="/static/style.css">
-<script src="/static/app.js" defer></script>
+<link rel="stylesheet" href="/static/style.css?v=${ASSET_V['style.css']}">
+<script src="/static/app.js?v=${ASSET_V['app.js']}" defer></script>
 </head>
 <body>
 <a class="skip" href="#main">본문 바로가기</a>

@@ -14,12 +14,12 @@ function listen(handler) {
   });
 }
 
-async function startStack({ mockOpts = {}, clientSecret = SECRET, limits } = {}) {
+async function startStack({ mockOpts = {}, clientSecret = SECRET, limits, config: extra = {} } = {}) {
   const mock = createMockNuri({ secret: SECRET, ...mockOpts });
   const m = await listen((req, res) => mock.handler(req, res));
   const nuri = createNuriClient({ baseUrl: m.url, secret: clientSecret, logger: quiet });
   const config = {
-    trustProxy: false, cookieSecure: true, orgName: '시험시', orgContact: '민원실 000-0000', privacyRetention: '시험 기간',
+    trustProxy: false, cookieSecure: true, orgName: '시험시', orgContact: '민원실 000-0000', privacyRetention: '시험 기간', ...extra,
   };
   const app = createApp({ config, nuri, logger: quiet, limits });
   const a = await listen(app);

@@ -24,7 +24,7 @@ test('국민 화면', async (t) => {
     const agent = makeAgent(s.url);
     const r = await agent('GET', '/complaints/new');
     assert.equal(r.headers.get('cache-control'), 'no-store');
-    assert.match(r.headers.get('strict-transport-security'), /max-age=\d+/);
+    assert.equal(r.headers.get('strict-transport-security'), null, 'HSTS 는 HTTPS 응답에만');
     assert.match(r.headers.get('content-security-policy'), /default-src 'self'/);
     assert.equal(r.headers.get('x-frame-options'), 'DENY');
     assert.match(r.cookies[0], /HttpOnly/);
@@ -147,4 +147,54 @@ test('접수는 국민 IP별로 횟수를 제한한다', async (t) => {
   const codes = [];
   for (let i = 0; i < 3; i++) codes.push((await agent('POST', '/complaints', { _csrf: 'x' })).status);
   assert.deepEqual(codes, [403, 403, 429]);
+});
+
+test('암호화되지 않은 연결(http)은 받지 않는다', async (t) => {
+  const { isSecure, isLoopback } = require('../src/security');
+  assert.equal(isSecure({ socket: { encrypted: true }, headers: {} }, false), true);
+  assert.equal(isSecure({ socket: {}, headers: { 'x-forwarded-proto': 'https' } }, false), false, '프록시를 믿지 않으면 머리글은 무시');
+  assert.equal(isSecure({ socket: {}, headers: { 'x-forwarded-proto': 'http, https' } }, true), true);
+  assert.equal(isLoopback({ socket: { remoteAddress: '192.168.0.10' } }), false);
+  assert.equal(isLoopback({ socket: { remoteAddress: '::ffff:127.0.0.1' } }), true);
+
+  // 앞단 프록시 뒤: 프록시가 https 라고 알려 준 요청만 받는다
+  const s = await startStack({ config: { requireHttps: true, trustProxy: true } });
+  t.after(() => s.close());
+  const agent = makeAgent(s.url);
+  let r = await agent('GET', '/complaints/new');
+  assert.equal(r.status, 308);
+  assert.equal(r.headers.get('location'), 'https://127.0.0.1/complaints/new', '같은 주소의 https 로 (포트는 프록시 기본값)');
+  r = await agent('POST', '/lookup', { receiptNo: '2026-000001', password: 'abc12345' });
+  assert.equal(r.status, 403);
+  assert.match(r.text, /암호화된 연결이 필요합니다/);
+  r = await agent('GET', '/complaints/new', undefined, { 'X-Forwarded-Proto': 'https' });
+  assert.equal(r.status, 200);
+  assert.match(r.headers.get('strict-transport-security'), /max-age=\d+/);
+});
+
+test('설정: 기본은 http 를 막고, keytool 로 만든 .p12 인증서를 쓸 수 있다', () => {
+  const { loadConfig } = require('../src/config');
+  const base = { NURI_BASE_URL: 'https://nuri.example.go.kr', EP_SECRET: 'x'.repeat(40) };
+  assert.equal(loadConfig(base).requireHttps, true);
+  assert.equal(loadConfig({ ...base, REQUIRE_HTTPS: 'false' }).requireHttps, false);
+  assert.throws(() => loadConfig({ ...base, TLS_PFX_FILE: '/없는/파일.p12' }), /TLS_PFX_FILE/);
+});
+
+test('휴대폰 데이터 줄이기: 화면·파일 gzip, 지문 붙은 파일은 오래 저장', async (t) => {
+  const s = await startStack();
+  t.after(() => s.close());
+  const home = await fetch(s.url + '/', { headers: { 'Accept-Encoding': 'gzip' } });
+  assert.equal(home.headers.get('content-encoding'), 'gzip');
+  const html = await home.text();
+  const css = /href="(\/static\/style\.css\?v=[0-9a-f]{10})"/.exec(html);
+  assert.ok(css, '스타일 주소에 지문');
+  const r = await fetch(s.url + css[1], { headers: { 'Accept-Encoding': 'gzip' } });
+  assert.equal(r.status, 200);
+  assert.equal(r.headers.get('content-encoding'), 'gzip');
+  assert.match(r.headers.get('cache-control'), /max-age=31536000, immutable/);
+  const etag = r.headers.get('etag');
+  await r.text();
+  const again = await fetch(s.url + '/static/style.css', { headers: { 'If-None-Match': etag } });
+  assert.equal(again.status, 304);
+  assert.match(again.headers.get('cache-control'), /must-revalidate/);
 });

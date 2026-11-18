@@ -1,4 +1,5 @@
 'use strict';
+const zlib = require('node:zlib');
 /**
  * 행정누리 전자민원 (국민용) 요청 처리.
  *
@@ -11,7 +12,7 @@ const path = require('node:path');
 const views = require('./views');
 const { validateComplaintForm, validateLookupForm, parseListQuery, CATEGORIES } = require('./validation');
 const {
-  setSecurityHeaders, clientIp, RateLimiter, csrfToken, verifyCsrf, CaptchaStore,
+  setSecurityHeaders, isSecure, isLoopback, clientIp, RateLimiter, csrfToken, verifyCsrf, CaptchaStore,
 } = require('./security');
 const { NuriApiError } = require('./nuriClient');
 const { parseMultipart } = require('./multipart');
@@ -127,10 +128,22 @@ function createApp({ config, nuri, logger = console, captcha, limits = {}, sessi
   }
   const staticCache = new Map();
 
+  /** 휴대폰이 받는 양을 줄인다: 1KB 넘는 글자 응답은 gzip 으로 (받는 쪽이 된다고 할 때만) */
+  function wantsGzip(res) {
+    const req = res.req;
+    return !!(req && /\bgzip\b/.test(String(req.headers['accept-encoding'] || '')));
+  }
+
   function send(res, status, html) {
     res.statusCode = status;
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    res.end(html);
+    res.setHeader('Vary', 'Accept-Encoding');
+    const buf = Buffer.from(String(html), 'utf8');
+    if (buf.length > 1024 && wantsGzip(res)) {
+      res.setHeader('Content-Encoding', 'gzip');
+      return res.end(zlib.gzipSync(buf, { level: 6 }));
+    }
+    res.end(buf);
   }
 
   function tooMany(res, limiter, ip) {
@@ -328,20 +341,48 @@ function createApp({ config, nuri, logger = console, captcha, limits = {}, sessi
 
   /* -------------------------------------------------------------- 정적 파일 */
 
-  function serveStatic(res, entry) {
-    let body = staticCache.get(entry);
-    if (!body) {
-      body = entry.body !== undefined ? Buffer.from(entry.body) : fs.readFileSync(entry.file);
-      staticCache.set(entry, body);
+  function serveStatic(req, res, entry) {
+    let c = staticCache.get(entry);
+    if (!c) {
+      const raw = entry.body !== undefined ? Buffer.from(entry.body) : fs.readFileSync(entry.file);
+      const text = /^(text\/|image\/svg|application\/(json|manifest))/.test(entry.type);
+      c = { raw, gz: text && raw.length > 512 ? zlib.gzipSync(raw, { level: 9 }) : null,
+        etag: '"' + require('node:crypto').createHash('sha256').update(raw).digest('base64url').slice(0, 16) + '"' };
+      staticCache.set(entry, c);
     }
     res.setHeader('Content-Type', entry.type);
-    res.end(body);
+    res.setHeader('Vary', 'Accept-Encoding');
+    res.setHeader('ETag', c.etag);
+    // 주소에 지문(?v=)이 붙은 파일은 1년 동안 다시 받지 않는다. 지문이 없으면 매번 바뀌었는지만 묻는다
+    res.setHeader('Cache-Control', /[?&]v=[0-9a-f]{6,}/.test(String(req.url)) ? 'public, max-age=31536000, immutable' : 'public, max-age=0, must-revalidate');
+    res.removeHeader('Pragma');
+    if (req.headers['if-none-match'] === c.etag) {
+      res.statusCode = 304;
+      return res.end();
+    }
+    if (c.gz && /\bgzip\b/.test(String(req.headers['accept-encoding'] || ''))) {
+      res.setHeader('Content-Encoding', 'gzip');
+      return res.end(req.method === 'HEAD' ? undefined : c.gz);
+    }
+    res.end(req.method === 'HEAD' ? undefined : c.raw);
   }
 
   /* -------------------------------------------------------------- 라우터 */
 
   async function route(req, res) {
-    setSecurityHeaders(res);
+    const secure = isSecure(req, config.trustProxy);
+    setSecurityHeaders(res, secure);
+    // 와이파이·인터넷에서 http 로 오면 비밀번호·개인정보가 그대로 보이므로 받지 않는다
+    if (config.requireHttps && !secure && !(isLoopback(req) && !config.trustProxy)) {
+      const host = String(req.headers.host || '');
+      if ((req.method === 'GET' || req.method === 'HEAD') && /^[A-Za-z0-9.\-[\]:]{1,255}$/.test(host)) {
+        res.statusCode = 308;
+        res.setHeader('Location', `https://${host.replace(/:\d+$/, (m) => (config.tls ? m : ''))}${String(req.url).startsWith('/') ? req.url : '/'}`);
+        return res.end();
+      }
+      return send(res, 403, views.errorPage(ctx, 403, '암호화된 연결이 필요합니다',
+        '개인정보를 보호하려고 https:// 로 시작하는 주소에서만 받습니다. 주소창의 http:// 를 https:// 로 바꿔 다시 접속하세요.'));
+    }
     const ip = clientIp(req, config.trustProxy);
     if (!limiters.global.take(ip)) return tooMany(res, limiters.global, ip);
 
@@ -356,7 +397,7 @@ function createApp({ config, nuri, logger = console, captcha, limits = {}, sessi
     if (m === 'GET' || m === 'HEAD') {
       if (p === '/') return home(req, res, ip);
       if (p === '/healthz') { res.setHeader('Content-Type', 'text/plain'); return res.end('ok'); }
-      if (STATIC[p]) return serveStatic(res, STATIC[p]);
+      if (STATIC[p]) return serveStatic(req, res, STATIC[p]);
       if (p === '/manifest.webmanifest') {
         // 휴대폰 '홈 화면에 추가' 때 쓰는 이름·아이콘 (개인정보 없음)
         res.setHeader('Content-Type', 'application/manifest+json; charset=utf-8');
