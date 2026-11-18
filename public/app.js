@@ -124,3 +124,45 @@
   var done = document.querySelector('[data-draft-done]');
   if (done) del('ep-draft-' + done.getAttribute('data-draft-done'));
 })();
+
+// 신청서 작성 중 제목과 비슷한 공개 상담을 보여 준다 (이미 답이 있으면 신청하지 않아도 되도록)
+(function () {
+  var box = document.querySelector('[data-similar-for]');
+  if (!box || !window.fetch) return;
+  var input = document.getElementById(box.getAttribute('data-similar-for'));
+  if (!input) return;
+  var timer = null;
+  var last = '';
+  function render(items) {
+    while (box.firstChild) box.removeChild(box.firstChild);
+    if (!items.length) { box.hidden = true; return; }
+    var p = document.createElement('p');
+    p.textContent = '비슷한 공개 상담이 있습니다. 먼저 읽어 보세요 (새 창):';
+    box.appendChild(p);
+    var ul = document.createElement('ul');
+    items.forEach(function (it) {
+      var li = document.createElement('li');
+      var a = document.createElement('a');
+      a.href = '/consultations/' + encodeURIComponent(it.id);
+      a.target = '_blank';
+      a.rel = 'noopener';
+      a.textContent = it.title + (it.category ? ' (' + it.category + ')' : '');
+      li.appendChild(a);
+      ul.appendChild(li);
+    });
+    box.appendChild(ul);
+    box.hidden = false;
+  }
+  function look() {
+    var q = input.value.trim();
+    if (q.length < 4 || q === last) return;
+    last = q;
+    fetch('/consultations/similar?q=' + encodeURIComponent(q), { credentials: 'same-origin' })
+      .then(function (r) { return r.ok ? r.json() : { items: [] }; })
+      .then(function (d) { if (input.value.trim() === q) render(Array.isArray(d.items) ? d.items : []); })
+      .catch(function () {});
+  }
+  input.addEventListener('input', function () { clearTimeout(timer); timer = setTimeout(look, 700); });
+  input.addEventListener('change', look);
+  if (input.value) look();
+})();

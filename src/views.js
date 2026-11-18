@@ -204,6 +204,7 @@ ${ctx.member ? `<p class="hint">${esc(ctx.member.name)}님 회원 정보로 이�
 <fieldset>
   <legend>민원 내용</legend>
   ${input('title', '제목 <span class="req">(필수)</span>', 'maxlength="300" required')}
+  <div class="similar" data-similar-for="title" aria-live="polite" hidden></div>
   <div class="field">
     <label for="content">내용 <span class="req">(필수)</span></label>
     <p class="hint">20,000자 이내. 주민등록번호 등 꼭 필요하지 않은 개인정보는 적지 마세요.</p>
@@ -312,6 +313,18 @@ function statusBadge(status, label) {
   return `<span class="badge ${cls}">${esc(label || status)}</span>`;
 }
 
+/** 처리 단계 막대: 접수 → 처리 중 → 처리 완료 */
+function stageBar(d) {
+  const at = { RECEIVED: 1, IN_PROGRESS: 2, DONE: 3 }[d.status];
+  if (!at) return '';
+  const names = ['접수', '담당 배정·처리 중', d.statusLabel === '취하' ? '취하' : '처리 완료'];
+  return `<ol class="stage" aria-label="처리 단계">${names.map((n, i) => {
+    const step = i + 1;
+    const cls = step < at ? 'done' : step === at ? 'now' : '';
+    return `<li class="${cls}"${step === at ? ' aria-current="step"' : ''}><span class="dot" aria-hidden="true">${step < at || at === 3 ? '✓' : step}</span>${esc(n)}${step < at ? '<span class="sr-only"> (지남)</span>' : ''}</li>`;
+  }).join('')}</ol>`;
+}
+
 /** 5-2 / 5-4 공통 상세 */
 function complaintDetail(d, { showName = true } = {}) {
   const steps = Array.isArray(d.steps) ? d.steps : [];
@@ -333,7 +346,7 @@ function complaintDetail(d, { showName = true } = {}) {
   </div>` : ''}
 </section>` : '';
 
-  return `
+  return `${stageBar(d)}
 <dl class="meta">
   <dt>접수번호</dt><dd>${esc(d.receiptNo)}</dd>
   <dt>민원 종류</dt><dd>${esc(d.kindLabel)}</dd>
@@ -524,6 +537,7 @@ function errorPage(ctx, status, title, message) {
 }
 
 module.exports = {
+  stageBar,
   esc, dt, layout, telLinks, home, complaintForm, complaintDone, lookupForm, lookupResult, ownerActions, complaintDetail,
   fieldError, aria, errorSummary, captchaField, searchBox, pager, statusBadge,
   consultationList, consultationDetail, dispositionList, errorPage,

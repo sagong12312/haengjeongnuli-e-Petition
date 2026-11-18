@@ -457,7 +457,9 @@ function createMockNuri({
       }
       const mine = [...complaints.values()].filter((r) => r.memberId === mem.memberId).reverse();
       if (G && rest === '/complaints') {
-        return ok(res, paginate(mine.map((r) => ({ receiptNo: r.receiptNo, kindLabel: KIND_LABEL[r.kind], title: r.title, status: r.status,
+        const st = u.searchParams.get('status');
+        const pick = mine.filter((r) => st === 'open' ? r.status !== 'DONE' : st === 'done' ? r.status === 'DONE' : true);
+        return ok(res, paginate(pick.map((r) => ({ receiptNo: r.receiptNo, kindLabel: KIND_LABEL[r.kind], title: r.title, status: r.status,
           statusLabel: r.result && r.result.type === '취하' ? '취하' : { RECEIVED: '접수', IN_PROGRESS: '처리 중', DONE: '처리 완료' }[r.status],
           receivedAt: r.receivedAt, deadlineAt: r.deadlineAt, completedAt: r.result ? r.result.completedAt : null })), page));
       }

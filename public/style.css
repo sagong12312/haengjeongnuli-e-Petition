@@ -216,3 +216,24 @@ input[type=file] { padding: 8px; }
   .search input { flex: 1 1 200px; min-width: 160px; }
   .search .btn { flex: none; white-space: nowrap; }
 }
+
+/* 처리 단계 막대 */
+.stage { list-style: none; display: flex; gap: 0; padding: 0; margin: 8px 0 18px; counter-reset: s; }
+.stage li { flex: 1; position: relative; text-align: center; font-size: 15px; color: var(--muted); padding-top: 4px; }
+.stage li::before { content: ''; position: absolute; top: 20px; left: -50%; width: 100%; height: 4px; background: #d9dee8; z-index: 0; }
+.stage li:first-child::before { display: none; }
+.stage li.done::before, .stage li.now::before { background: var(--brand); }
+.stage .dot { position: relative; z-index: 1; display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; margin: 0 auto 6px; border-radius: 50%; background: #fff; border: 3px solid #d9dee8; font-weight: 700; }
+.stage li.done .dot, .stage li.now .dot { border-color: var(--brand); }
+.stage li.done .dot { background: var(--brand); color: #fff; }
+.stage li.now { color: var(--fg); font-weight: 700; }
+/* 상태 탭 */
+.tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 12px; }
+.tabs a { min-height: 44px; display: inline-flex; align-items: center; padding: 0 16px; border: 1px solid #c9d1df; border-radius: 999px; text-decoration: none; }
+.tabs a[aria-current="page"] { background: var(--brand); border-color: var(--brand); color: #fff; font-weight: 700; }
+.st-new { background: #fff1f0; color: #b42318; }
+/* 비슷한 공개 상담 */
+.similar { border: 1px solid #c9d1df; border-radius: 8px; padding: 12px 14px; margin: -4px 0 16px; background: #f8fafc; }
+.similar p { margin: 0 0 6px; }
+.similar ul { margin: 0; padding-left: 20px; }
+.similar li { margin: 4px 0; }

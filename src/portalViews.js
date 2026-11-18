@@ -9,10 +9,17 @@ const {
 
 /* ------------------------------------------------------------------ 공지사항 */
 
+/** 올린 지 7일이 안 된 글. 행정누리는 시간대 없이 한국 시각(KST)으로 준다 */
+function isNew(at, now = Date.now()) {
+  const v = String(at || '').trim().replace(' ', 'T');
+  const t = Date.parse(/(Z|[+-]\d{2}:?\d{2})$/.test(v) ? v : v + '+09:00');
+  return Number.isFinite(t) && now - t >= -60000 && now - t < 7 * 24 * 3600 * 1000;
+}
+
 function noticeList(ctx, data, q) {
   const items = Array.isArray(data.items) ? data.items : [];
   const rows = items.map((n) => `<tr>
-  <td class="title" data-label="제목">${n.pinned ? '<span class="badge st-progress">고정</span> ' : ''}<a href="/notices/${encodeURIComponent(String(n.id))}">${esc(n.title)}</a></td>
+  <td class="title" data-label="제목">${n.pinned ? '<span class="badge st-progress">고정</span> ' : ''}${isNew(n.createdAt) ? '<span class="badge st-new">새 글</span> ' : ''}<a href="/notices/${encodeURIComponent(String(n.id))}">${esc(n.title)}</a></td>
   <td data-label="올린 날">${dt(n.createdAt).slice(0, 10)}</td>
   <td class="num" data-label="조회">${esc(n.views ?? 0)}</td>
 </tr>`).join('');
@@ -40,17 +47,27 @@ function noticeDetail(ctx, n) {
 
 /* ------------------------------------------------------------------ 자주 묻는 질문 */
 
-function faqPage(ctx, data) {
-  const cats = Array.isArray(data.categories) ? data.categories : [];
+function faqPage(ctx, data, q = '') {
+  const key = q.toLowerCase();
+  const hit = (it) => !key || `${it.question || ''} ${it.answer || ''}`.toLowerCase().includes(key);
+  const cats = (Array.isArray(data.categories) ? data.categories : [])
+    .map((c) => ({ ...c, items: (Array.isArray(c.items) ? c.items : []).filter(hit) }))
+    .filter((c) => c.items.length);
+  const found = cats.reduce((n, c) => n + c.items.length, 0);
+  const empty = q
+    ? `<p class="empty">‘${esc(q)}’에 맞는 질문이 없습니다. <a href="/faq">모든 질문 보기</a> 또는 <a href="/complaints/new">질의민원</a>으로 물어 주세요.</p>`
+    : '<p class="empty">올라온 질문이 없습니다. 궁금한 점은 기관에 문의해 주세요.</p>';
   const body = cats.length ? cats.map((c, ci) => `<section>
   <h2 id="faq-${ci}">${esc(c.category)}</h2>
-  ${(Array.isArray(c.items) ? c.items : []).map((it) => `<details class="faq">
+  ${c.items.map((it) => `<details class="faq"${q ? ' open' : ''}>
     <summary>${esc(it.question)}</summary>
     <div class="text">${esc(it.answer)}</div>
   </details>`).join('')}
-</section>`).join('') : '<p class="empty">올라온 질문이 없습니다. 궁금한 점은 기관에 문의해 주세요.</p>';
+</section>`).join('') : empty;
   return layout(ctx, '자주 묻는 질문', `
 <h1>자주 묻는 질문</h1>
+${searchBox('/faq', q, '질문·답 검색 (예: 처리기간)')}
+${q && found ? `<p class="count">‘${esc(q)}’ 검색 결과 ${found}건 · <a href="/faq">모두 보기</a></p>` : ''}
 <p class="hint">질문을 누르면 답이 펼쳐집니다. 찾는 답이 없으면 <a href="/complaints/new">질의민원</a>으로 물어 주세요.</p>
 ${body}`, 'faq');
 }
@@ -272,7 +289,7 @@ function logoutConfirm(ctx, csrf) {
 
 /* ------------------------------------------------------------------ 내 민원 */
 
-function myList(ctx, data, notice = '') {
+function myList(ctx, data, notice = '', status = '') {
   const items = Array.isArray(data.items) ? data.items : [];
   const rows = items.map((c) => `<tr>
   <td class="title" data-label="제목"><a href="/my/complaints/${encodeURIComponent(c.receiptNo)}">${esc(c.title)}</a></td>
@@ -285,11 +302,16 @@ function myList(ctx, data, notice = '') {
   return layout(ctx, '내 민원', `
 <h1>내 민원</h1>
 ${notice ? `<div class="alert alert-ok" role="status"><p>${esc(notice)}</p></div>` : ''}
-<p class="count">모두 ${esc(data.total ?? 0)}건 · <a href="/complaints/new">새 민원 신청</a></p>
+<nav class="tabs" aria-label="처리 상태로 거르기">
+  <a href="/my"${status ? '' : ' aria-current="page"'}>모두</a>
+  <a href="/my?status=open"${status === 'open' ? ' aria-current="page"' : ''}>처리 중</a>
+  <a href="/my?status=done"${status === 'done' ? ' aria-current="page"' : ''}>처리 완료</a>
+</nav>
+<p class="count">${status === 'open' ? '처리 중 ' : status === 'done' ? '처리 완료 ' : '모두 '}${esc(data.total ?? 0)}건 · <a href="/complaints/new">새 민원 신청</a></p>
 ${items.length ? `<div class="table-wrap"><table class="list stack">
 <thead><tr><th scope="col">제목</th><th scope="col">상태</th><th scope="col">접수번호</th><th scope="col">종류</th><th scope="col">접수</th><th scope="col">처리 완료 / 기한</th></tr></thead>
-<tbody>${rows}</tbody></table></div>` : '<p class="empty">회원으로 신청한 민원이 없습니다. 가입하기 전에 낸 민원은 <a href="/lookup">처리상황 조회</a>에서 접수번호로 보세요.</p>'}
-${pager('/my', data, '')}`, 'my');
+<tbody>${rows}</tbody></table></div>` : status ? '<p class="empty">이 상태의 민원이 없습니다.</p>' : '<p class="empty">회원으로 신청한 민원이 없습니다. 가입하기 전에 낸 민원은 <a href="/lookup">처리상황 조회</a>에서 접수번호로 보세요.</p>'}
+${pager('/my', data, '', status ? `&amp;status=${status}` : '')}`, 'my');
 }
 
 function myComplaint(ctx, d, csrf) {
@@ -369,6 +391,7 @@ ${fieldError(errors, 'confirm')}
 }
 
 module.exports = {
+  isNew,
   noticeList, noticeDetail, faqPage, guidePage, statsPage, termsPage, privacyPage,
   signupForm, loginForm, logoutConfirm, myList, myComplaint, actionDone, profileForm, passwordForm, withdrawForm,
 };

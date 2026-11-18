@@ -282,6 +282,30 @@ function createApp({ config, nuri, logger = console, captcha, limits = {}, sessi
     send(res, 200, views.consultationList(rc(req), data || {}, q, { kind, category, sort }));
   }
 
+  /** 신청서 작성 중: 제목과 비슷한 공개 상담 (제목 낱말 가운데 긴 것 3개로 찾아 많이 겹치는 순) */
+  async function similarConsultations(req, res, ip, url) {
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-store');
+    if (!limiters.read.take(ip)) { res.statusCode = 429; return res.end('{"items":[]}'); }
+    const words = [...new Set(String(url.searchParams.get('q') || '').slice(0, 300)
+      .split(/[\s.,!?()[\]{}"'“”‘’·\-~/]+/u).map((w) => w.replace(/(은|는|이|가|을|를|에|의|에서|으로|로|와|과|도)$/u, ''))
+      .filter((w) => w.length >= 2))].sort((a, b) => b.length - a.length).slice(0, 3);
+    const hits = new Map();
+    for (const w of words) {
+      let data;
+      try { data = await nuri.listConsultations(1, w, ip); } catch { data = null; }
+      for (const it of (data && Array.isArray(data.items) ? data.items : []).slice(0, 10)) {
+        const cur = hits.get(it.id) || { id: it.id, title: String(it.title || ''), category: String(it.categoryLabel || ''), n: 0 };
+        cur.n++;
+        hits.set(it.id, cur);
+      }
+    }
+    const items = [...hits.values()].sort((a, b) => b.n - a.n).slice(0, 5)
+      .map(({ id, title, category }) => ({ id: String(id), title: title.slice(0, 200), category: category.slice(0, 50) }));
+    res.statusCode = 200;
+    res.end(JSON.stringify({ items }));
+  }
+
   async function consultation(req, res, ip, id, url) {
     if (!limiters.read.take(ip)) return tooMany(res, limiters.read, ip);
     try {
@@ -349,6 +373,7 @@ function createApp({ config, nuri, logger = console, captcha, limits = {}, sessi
       if (p === '/complaints/new') return newComplaint(req, res, ip);
       if (p === '/lookup') return showLookupForm(req, res);
       if (p === '/consultations') return consultations(req, res, ip, url);
+      if (p === '/consultations/similar') return similarConsultations(req, res, ip, url);
       let mm = /^\/consultations\/(\d{1,18})$/.exec(p);
       if (mm) return consultation(req, res, ip, mm[1], url);
       if (p === '/dispositions') return dispositions(req, res, ip, url);

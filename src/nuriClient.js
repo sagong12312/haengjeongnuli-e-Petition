@@ -178,8 +178,9 @@ function createNuriClient({ baseUrl, secret, timeoutMs = 10000, ca, logger = con
     deleteMember(memberId, password, clientIp) {
       return request('POST', `/members/${encodeURIComponent(String(memberId))}/delete`, { password }, clientIp);
     },
-    memberComplaints(memberId, page, clientIp) {
-      return request('GET', `/members/${encodeURIComponent(String(memberId))}/complaints?page=${encodeURIComponent(String(page))}`, undefined, clientIp);
+    memberComplaints(memberId, page, clientIp, status) {
+      const st = status === 'open' || status === 'done' ? `&status=${status}` : '';
+      return request('GET', `/members/${encodeURIComponent(String(memberId))}/complaints?page=${encodeURIComponent(String(page))}${st}`, undefined, clientIp);
     },
     memberComplaint(memberId, receiptNo, clientIp) {
       return request('GET', `/members/${encodeURIComponent(String(memberId))}/complaints/${encodeURIComponent(receiptNo)}`, undefined, clientIp);

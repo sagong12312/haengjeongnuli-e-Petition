@@ -56,9 +56,10 @@ function createPortalRoutes(h) {
     }
   }
 
-  async function faq(req, res, ip) {
+  async function faq(req, res, ip, url) {
     if (!limiters.read.take(ip)) return tooMany(res, limiters.read, ip);
-    send(res, 200, pv.faqPage(rc(req), (await nuri.faqs(ip)) || {}));
+    const q = (url.searchParams.get('q') || '').trim().slice(0, 100);
+    send(res, 200, pv.faqPage(rc(req), (await nuri.faqs(ip)) || {}, q));
   }
 
   async function guide(req, res, ip) {
@@ -209,9 +210,11 @@ function createPortalRoutes(h) {
     if (needLogin(req, res, url)) return;
     if (!limiters.read.take(ip)) return tooMany(res, limiters.read, ip);
     const { page } = parseListQuery(url.searchParams);
+    const stRaw = url.searchParams.get('status');
+    const status = stRaw === 'open' || stRaw === 'done' ? stRaw : '';
     let data;
     try {
-      data = await nuri.memberComplaints(req.member.memberId, page, ip);
+      data = await nuri.memberComplaints(req.member.memberId, page, ip, status || undefined);
     } catch (e) {
       if (memberGone(req, res, e)) return;
       throw e;
@@ -222,7 +225,7 @@ function createPortalRoutes(h) {
       notice = `지난 로그인: ${String(req.session.previousLoginAt).replace('T', ' ')}. 본인이 아니면 비밀번호를 바꿔 주세요.`;
       req.session.shownPrev = true;
     }
-    send(res, 200, pv.myList(rc(req), data || {}, notice));
+    send(res, 200, pv.myList(rc(req), data || {}, notice, status));
   }
 
   async function myComplaint(req, res, ip, url, receiptNo) {
@@ -345,7 +348,7 @@ function createPortalRoutes(h) {
     if (p === '/notices') return (await notices(req, res, ip, url), true);
     let mm = /^\/notices\/(\d{1,18})$/.exec(p);
     if (mm) return (await notice(req, res, ip, mm[1]), true);
-    if (p === '/faq') return (await faq(req, res, ip), true);
+    if (p === '/faq') return (await faq(req, res, ip, url), true);
     if (p === '/guide') return (await guide(req, res, ip), true);
     if (p === '/stats') return (await stats(req, res, ip), true);
     if (p === '/terms') return (await send(res, 200, pv.termsPage(rc(req))), true);

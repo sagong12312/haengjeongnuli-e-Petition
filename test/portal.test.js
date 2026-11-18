@@ -314,3 +314,68 @@ test('임시저장 스크립트는 이름·연락처를 저장하지 않는다',
   }
   assert.match(js, /MAX_AGE = 24 \* 3600 \* 1000/);
 });
+
+test('전자민원 개선: 비슷한 공개 상담, FAQ 검색, 새 글, 처리 단계, 내 민원 상태별', async (t) => {
+  const s = await startStack();
+  t.after(() => s.close());
+  const agent = makeAgent(s.url);
+
+  // 비슷한 공개 상담 (JSON, 글자는 JSON 안에서만)
+  let r = await agent('GET', '/consultations/similar?q=' + encodeURIComponent('우리 동네 가로등이 고장 났어요'));
+  assert.equal(r.status, 200);
+  assert.match(r.headers.get('content-type'), /application\/json/);
+  const sim = JSON.parse(r.text);
+  assert.ok(sim.items.some((it) => /가로등 고장/.test(it.title)), r.text);
+  assert.deepEqual(JSON.parse((await agent('GET', '/consultations/similar?q=a')).text).items, []);
+  const form = await agent('GET', '/complaints/new');
+  assert.match(form.text, /data-similar-for="title"/);
+
+  // FAQ 검색
+  r = await agent('GET', '/faq?q=' + encodeURIComponent('첨부파일'));
+  assert.match(r.text, /첨부파일은 몇 개까지/);
+  assert.match(r.text, /검색 결과 \d+건/);
+  assert.match(r.text, /<details class="faq" open>/);
+  r = await agent('GET', '/faq?q=' + encodeURIComponent('<script>없는말'));
+  assert.match(r.text, /&lt;script&gt;없는말’에 맞는 질문이 없습니다/);
+  assert.ok(!r.text.includes('<script>없는말'));
+
+  // 공지 새 글 (7일 안)
+  s.mock.addNotice('새 공지', '내용');
+  assert.match((await agent('GET', '/notices')).text, /새 글<\/span> <a href="\/notices\/\d+">새 공지/);
+  const pv = require('../src/portalViews');
+  assert.equal(pv.isNew(new Date(Date.now() - 8 * 86400000).toISOString()), false);
+  assert.equal(pv.isNew('2026-01-01 09:00', Date.parse('2026-01-03T09:00:00+09:00')), true);
+  assert.equal(pv.isNew('2026-01-01 09:00', Date.parse('2026-01-09T09:00:00+09:00')), false);
+  assert.equal(pv.isNew('엉터리'), false);
+
+  // 처리 단계 막대
+  const { stageBar } = require('../src/views');
+  assert.match(stageBar({ status: 'IN_PROGRESS' }), /class="now" aria-current="step"><span class="dot" aria-hidden="true">2<\/span>담당 배정·처리 중/);
+  assert.match(stageBar({ status: 'DONE', statusLabel: '취하' }), /취하/);
+  assert.equal(stageBar({}), '');
+
+  // 내 민원 상태별
+  let f = await open(s, agent, '/signup');
+  r = await agent('POST', '/signup', { ...member, _csrf: f.csrf, captchaId: f.captchaId, captcha: f.captcha });
+  assert.equal(r.status, 303, r.text);
+  for (const title of ['첫째 민원', '둘째 민원']) {
+    f = await open(s, agent, '/complaints/new');
+    r = await agent('POST', '/complaints', { ...complaint, title, _csrf: f.csrf, captchaId: f.captchaId, captcha: f.captcha });
+    assert.equal(r.status, 200, r.text);
+  }
+  const first = [...s.mock.complaints.values()].find((c) => c.title === '첫째 민원');
+  first.status = 'DONE';
+  first.result = { type: '수용', text: '처리했습니다.', completedAt: '2026-11-18 10:00' };
+  r = await agent('GET', '/my?status=done');
+  assert.match(r.text, /첫째 민원/);
+  assert.ok(!r.text.includes('둘째 민원'));
+  assert.match(r.text, /<a href="\/my\?status=done" aria-current="page">/);
+  r = await agent('GET', '/my?status=open');
+  assert.match(r.text, /둘째 민원/);
+  assert.ok(!r.text.includes('첫째 민원'));
+  r = await agent('GET', '/my?status=evil');
+  assert.match(r.text, /첫째 민원/);
+  assert.match(r.text, /둘째 민원/);
+  r = await agent('GET', `/my/complaints/${first.receiptNo}`);
+  assert.match(r.text, /class="stage"/);
+});
