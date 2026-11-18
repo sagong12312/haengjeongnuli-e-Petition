@@ -162,8 +162,23 @@ function memberPasswordProblem(pw, loginId) {
   }
   if (loginId && pw.toLowerCase().includes(loginId.toLowerCase())) return '비밀번호에 아이디를 넣을 수 없습니다.';
   if (/(.)\1\1\1/.test(pw)) return '같은 글자를 4번 넘게 잇달아 쓸 수 없습니다.';
+  const low = pw.toLowerCase();
+  const common = COMMON_WORDS.find((w) => low.includes(w));
+  if (common) return `'${common}'처럼 흔한 낱말이 들어간 비밀번호는 쓸 수 없습니다.`;
+  let up = 1; let down = 1;
+  for (let i = 1; i < pw.length; i++) {
+    const a = pw.charCodeAt(i - 1); const b = pw.charCodeAt(i);
+    const digits = a >= 48 && a <= 57 && b >= 48 && b <= 57;
+    up = digits && b - a === 1 ? up + 1 : 1;
+    down = digits && a - b === 1 ? down + 1 : 1;
+    if (up >= 4 || down >= 4) return '1234·4321처럼 4자리 넘게 이어지는 숫자는 쓸 수 없습니다.';
+  }
   return null;
 }
+
+/** 행정누리 PasswordPolicy.COMMON 과 같은 목록 */
+const COMMON_WORDS = ['password', 'passwd', 'qwerty', 'qwer', 'asdf', 'zxcv', '1q2w3e', 'q1w2e3', 'admin', 'welcome', 'iloveyou',
+  'letmein', 'abcd', 'korea', 'seoul', 'dragon', 'monkey', 'master', 'login', 'test', 'guest', 'haengjeong', 'nuri'];
 
 /** 이름·휴대전화·이메일·주소 (가입·내 정보 고치기 공통) */
 function validateProfile(f, errors) {
