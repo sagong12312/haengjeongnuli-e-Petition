@@ -198,3 +198,25 @@ test('휴대폰 데이터 줄이기: 화면·파일 gzip, 지문 붙은 파일�
   assert.equal(again.status, 304);
   assert.match(again.headers.get('cache-control'), /must-revalidate/);
 });
+
+test('HTTPS 포트로 http:// 가 와도 오류 대신 https:// 로 넘긴다', async (t) => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const https = require('node:https');
+  const { dualPortServer } = require('../src/server');
+  // 시험 전용 자체 서명 인증서 (비밀번호도 시험용, 운영과 무관)
+  const tls = { pfx: fs.readFileSync(path.join(__dirname, 'fixtures', 'test-tls.p12')), passphrase: '0123456789abcdef0123456789abcdef' };
+  const server = dualPortServer({ tls, port: 0 }, (req, res) => { res.end('ok'); });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  t.after(() => server.close());
+  const port = server.address().port;
+  const r = await fetch(`http://127.0.0.1:${port}/my?a=1`, { redirect: 'manual' });
+  assert.equal(r.status, 308);
+  assert.equal(r.headers.get('location'), `https://127.0.0.1:${port}/my?a=1`);
+  const body = await new Promise((resolve, reject) => {
+    https.get({ host: '127.0.0.1', port, path: '/', ca: fs.readFileSync(path.join(__dirname, 'fixtures', 'test-tls.cer')) }, (res) => {
+      let d = ''; res.on('data', (c) => { d += c; }); res.on('end', () => resolve(d));
+    }).on('error', reject);
+  });
+  assert.equal(body, 'ok');
+});
