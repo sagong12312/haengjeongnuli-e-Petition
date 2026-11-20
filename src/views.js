@@ -10,7 +10,7 @@ const ASSET_V = (() => {
   const path = require('node:path');
   const crypto = require('node:crypto');
   const v = {};
-  for (const f of ['style.css', 'app.js']) {
+  for (const f of ['style.css', 'app.js', 'theme.js']) {
     try {
       v[f] = crypto.createHash('sha256').update(fs.readFileSync(path.join(__dirname, '..', 'public', f))).digest('hex').slice(0, 10);
     } catch { v[f] = '0'; }
@@ -62,6 +62,7 @@ function layout(ctx, title, body, active = '') {
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/static/icon-180.png">
+<script src="/static/theme.js?v=${ASSET_V['theme.js']}"></script>
 <link rel="stylesheet" href="/static/style.css?v=${ASSET_V['style.css']}">
 <script src="/static/app.js?v=${ASSET_V['app.js']}" defer></script>
 </head>
@@ -78,6 +79,7 @@ function layout(ctx, title, body, active = '') {
     ? `<li><span class="who">${esc(ctx.member.name)}님</span></li>${ctx.sessionIdleSec ? `<li><button type="button" class="linkish session-left" data-session-idle="${Number(ctx.sessionIdleSec)}" title="누르면 로그인 시간을 연장합니다">자동 로그아웃 <span data-left>${Math.floor(ctx.sessionIdleSec / 60)}분</span></button></li>` : ''}<li><a href="/my"${active === 'my' ? ' aria-current="page"' : ''}>내 민원</a></li><li><a href="/my/profile">내 정보</a></li><li><a href="/logout">로그아웃</a></li>`
     : `<li><a href="/login"${active === 'login' ? ' aria-current="page"' : ''}>로그인</a></li><li><a href="/signup"${active === 'signup' ? ' aria-current="page"' : ''}>회원가입</a></li>`}</ul>
     <button type="button" class="btn small" data-font-toggle aria-pressed="false">글자 크게</button>
+    <button type="button" class="btn small theme-toggle" data-theme-toggle aria-label="화면 색 바꾸기"><span class="ico" aria-hidden="true" data-theme-ico>◐</span> <span data-theme-name>자동</span></button>
     <button type="button" class="btn small" data-contrast-toggle aria-pressed="false">고대비</button>
   </div>
   <div class="wrap navrow">

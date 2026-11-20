@@ -605,3 +605,29 @@
     if (hp === location.pathname || (hp !== '/' && location.pathname.indexOf(hp + '/') === 0)) a.setAttribute('aria-current', 'page');
   });
 })();
+
+// 화면 색 바꾸기: 자동(기기 설정) → 밝게 → 어둡게 → 자동
+(function () {
+  var KEY = 'ep-theme';
+  var root = document.documentElement;
+  var NAMES = { auto: '자동', light: '밝게', dark: '어둡게' };
+  var ICO = { auto: '◐', light: '☀', dark: '☾' };
+  function current() { return root.getAttribute('data-theme') || 'auto'; }
+  function label() {
+    var t = current();
+    Array.prototype.forEach.call(document.querySelectorAll('[data-theme-toggle]'), function (b) {
+      b.querySelector('[data-theme-name]').textContent = NAMES[t];
+      b.querySelector('[data-theme-ico]').textContent = ICO[t];
+      b.setAttribute('aria-label', '화면 색: ' + NAMES[t] + ' (누르면 바뀝니다)');
+    });
+  }
+  document.addEventListener('click', function (e) {
+    var b = e.target && e.target.closest && e.target.closest('[data-theme-toggle]');
+    if (!b) return;
+    var next = { auto: 'light', light: 'dark', dark: 'auto' }[current()];
+    if (next === 'auto') root.removeAttribute('data-theme'); else root.setAttribute('data-theme', next);
+    try { if (next === 'auto') window.localStorage.removeItem(KEY); else window.localStorage.setItem(KEY, next); } catch (err) { /* 무시 */ }
+    label();
+  });
+  label();
+})();

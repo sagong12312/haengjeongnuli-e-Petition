@@ -319,13 +319,25 @@ html.hc :focus-visible { outline: 3px solid #ffeb3b; outline-offset: 2px; }
 [data-contrast-toggle][aria-pressed="true"] { outline: 2px solid #ffeb3b; }
 
 /* ── 어두운 화면 (기기 설정을 따름) ── */
-@media (prefers-color-scheme: dark) {
-  html:not(.hc) { --bg: #0f1420; --fg: #e6e9f0; --muted: #a8b0c2; --line: #2c3547; --card: #171e2d; --brand: #8fb0ff; --brand-dark: #a9c1ff;
+/* 사용자가 고른 색 (머리글의 '화면 색' 단추) */
+html[data-theme="light"] { color-scheme: light; }
+html[data-theme="dark"]:not(.hc) { --bg: #0f1420; --fg: #e6e9f0; --muted: #a8b0c2; --line: #2c3547; --card: #171e2d; --brand: #8fb0ff; --brand-dark: #a9c1ff;
     --err: #ff8a80; --err-bg: #2a1414; --warn-bg: #2a2410; --warn: #ffd27a; --info-bg: #142036; --ok: #7ee2a8; color-scheme: dark; }
-  html:not(.hc) input:not([type=checkbox]):not([type=radio]), html:not(.hc) select, html:not(.hc) textarea { background: #0f1420; border-color: #3a4560; }
-  html:not(.hc) .btn:not(.primary) { background: var(--card); color: var(--fg); border-color: var(--line); }
-  html:not(.hc) table, html:not(.hc) .table-wrap { background: var(--card); }
+html[data-theme="dark"]:not(.hc) body { background: var(--bg); color: var(--fg); }
+html[data-theme="dark"]:not(.hc) input:not([type=checkbox]):not([type=radio]), html[data-theme="dark"]:not(.hc) select, html[data-theme="dark"]:not(.hc) textarea { background: #0f1420; color: var(--fg); border-color: #3a4560; }
+html[data-theme="dark"]:not(.hc) .btn:not(.primary) { background: var(--card); color: var(--fg); border-color: var(--line); }
+html[data-theme="dark"]:not(.hc) .btn.primary { color: #0f1420; }
+html[data-theme="dark"]:not(.hc) table, html[data-theme="dark"]:not(.hc) .table-wrap { background: var(--card); }
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme="light"]):not(.hc) { --bg: #0f1420; --fg: #e6e9f0; --muted: #a8b0c2; --line: #2c3547; --card: #171e2d; --brand: #8fb0ff; --brand-dark: #a9c1ff;
+      --err: #ff8a80; --err-bg: #2a1414; --warn-bg: #2a2410; --warn: #ffd27a; --info-bg: #142036; --ok: #7ee2a8; color-scheme: dark; }
+  html:not([data-theme="light"]):not(.hc) body { background: var(--bg); color: var(--fg); }
+  html:not([data-theme="light"]):not(.hc) input:not([type=checkbox]):not([type=radio]), html:not([data-theme="light"]):not(.hc) select, html:not([data-theme="light"]):not(.hc) textarea { background: #0f1420; color: var(--fg); border-color: #3a4560; }
+  html:not([data-theme="light"]):not(.hc) .btn:not(.primary) { background: var(--card); color: var(--fg); border-color: var(--line); }
+  html:not([data-theme="light"]):not(.hc) .btn.primary { color: #0f1420; }
+  html:not([data-theme="light"]):not(.hc) table, html:not([data-theme="light"]):not(.hc) .table-wrap { background: var(--card); }
 }
+.theme-toggle .ico { display: inline-block; width: 1.1em; text-align: center; }
 
 /* ── 움직임 줄이기 ── */
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }

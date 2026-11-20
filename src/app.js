@@ -29,6 +29,7 @@ const MAX_MULTIPART_BYTES = 16 * 1024 * 1024;
 const STATIC = {
   '/static/style.css': { file: path.join(__dirname, '..', 'public', 'style.css'), type: 'text/css; charset=utf-8' },
   '/static/app.js': { file: path.join(__dirname, '..', 'public', 'app.js'), type: 'text/javascript; charset=utf-8' },
+  '/static/theme.js': { file: path.join(__dirname, '..', 'public', 'theme.js'), type: 'text/javascript; charset=utf-8' },
   '/static/icon.svg': { file: path.join(__dirname, '..', 'public', 'icon.svg'), type: 'image/svg+xml' },
   '/static/icon-180.png': { file: path.join(__dirname, '..', 'public', 'icon-180.png'), type: 'image/png' },
   '/static/icon-192.png': { file: path.join(__dirname, '..', 'public', 'icon-192.png'), type: 'image/png' },
