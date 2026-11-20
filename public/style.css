@@ -242,3 +242,98 @@ input[type=file] { padding: 8px; }
 .secapp h2 { margin: 0 0 6px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .secapp .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 form.inline { display: inline; margin: 0; }
+
+/* ── 도움말·안내 화면 ── */
+.process { counter-reset: st; list-style: none; padding: 0; margin: 0 0 16px; }
+.process li { counter-increment: st; position: relative; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 16px 12px 56px; margin: 0 0 8px; }
+.process li::before { content: counter(st); position: absolute; left: 14px; top: 12px; width: 30px; height: 30px; border-radius: 50%; background: var(--brand); color: #fff; font-weight: 700; display: grid; place-items: center; }
+.process li p { margin: 2px 0 0; color: var(--muted); }
+.glossary { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 8px 20px; }
+.glossary dt { color: var(--fg); font-weight: 700; margin-top: 12px; } .glossary dd { margin: 2px 0 12px; color: var(--muted); }
+.glossary dt:target { background: var(--warn-bg); }
+.checklist { list-style: none; padding: 0; } .checklist li { background: var(--card); border: 1px solid var(--line); border-radius: 10px; margin: 0 0 8px; }
+.checklist label { display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; min-height: 48px; cursor: pointer; }
+.checklist input:checked + * , .checklist label:has(input:checked) { color: var(--muted); text-decoration: line-through; }
+.sitemap { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.sitemap section { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 4px 16px 8px; }
+.sitemap h2 { font-size: 1.05rem; } .sitemap ul { padding-left: 18px; margin: 0; } .sitemap li { margin: 6px 0; }
+.easy { font-size: 1.12rem; line-height: 1.9; } .easy h2 { margin-top: 28px; }
+fieldset.ask { background: var(--card); } fieldset.ask label.radio { display: inline-flex; align-items: center; gap: 6px; margin-right: 16px; min-height: 44px; }
+.inline-block { display: inline-block; }
+
+/* ── 첫 화면 ── */
+.home-stats { margin-top: 24px; } .home-stats h2 .more { font-size: .85rem; font-weight: 400; margin-left: 8px; }
+.home-stats .nums { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
+.home-stats .nums li { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px; text-align: center; }
+.home-stats .nums strong { display: block; font-size: 1.5rem; color: var(--brand); } .home-stats .nums span { color: var(--muted); font-size: .9rem; }
+.quick { display: flex; flex-wrap: wrap; gap: 8px; list-style: none; padding: 0; margin: 16px 0; }
+.quick a { display: inline-flex; align-items: center; min-height: 44px; padding: 6px 14px; border: 1px solid var(--line); border-radius: 999px; background: var(--card); text-decoration: none; }
+
+/* ── 입력 도우미 ── */
+.counter { text-align: right; margin: 2px 0 0; font-size: .85rem; } .counter.warn { color: var(--warn); font-weight: 700; }
+.pii-warn { background: var(--err-bg); color: var(--err); border-radius: 8px; padding: 8px 12px; margin: 6px 0 0; font-weight: 600; }
+.file-list { margin: 6px 0 0; padding-left: 18px; font-size: .9rem; } .file-list .err { color: var(--err); font-weight: 600; list-style: none; margin-left: -18px; }
+.progress { display: flex; align-items: center; gap: 10px; margin: 0 0 12px; position: sticky; top: 0; z-index: 3; background: var(--bg); padding: 8px 0; }
+.progress progress { flex: 0 0 120px; height: 10px; accent-color: var(--brand); } .progress .hint { margin: 0; }
+.preview { background: var(--info-bg); border: 1px solid var(--line); border-radius: 12px; padding: 4px 20px 12px; margin: 12px 0; }
+.preview dl { display: grid; grid-template-columns: 7em 1fr; gap: 6px 12px; } .preview .pre { white-space: pre-wrap; }
+.pw-tools { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 4px; font-size: .9rem; }
+.pw-tools .caps { color: var(--warn); font-weight: 700; }
+.strength.s1, .match.bad, .idcheck.bad { color: var(--err); } .strength.s2 { color: var(--warn); } .strength.s3, .match.ok, .idcheck.ok { color: var(--ok); }
+.strength, .match, .idcheck { margin: 4px 0 0; font-weight: 600; }
+.tip { background: var(--warn-bg); padding: 4px 10px; border-radius: 6px; }
+.recent { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 6px 0 0; }
+.share { display: flex; flex-wrap: wrap; gap: 6px; margin: -8px 0 16px; }
+button.busy { opacity: .6; cursor: progress; }
+.btn.small { min-height: 36px; padding: 4px 12px; font-size: .9rem; }
+
+/* ── 자동 로그아웃 시간 ── */
+.session-left { color: #dbe4ff; font-size: .9rem; } .session-left.warn { color: #fff; background: var(--err); border-radius: 6px; padding: 0 6px; }
+
+/* ── 인터넷 끊김 ── */
+.offline-bar { position: fixed; left: 0; right: 0; top: 0; z-index: 50; background: var(--err); color: #fff; text-align: center; padding: 8px 16px; font-weight: 600; }
+
+/* ── 휴대폰 아래쪽 빠른 메뉴·맨 위로 ── */
+.tabbar { display: none; }
+.to-top { position: fixed; right: 14px; bottom: 18px; z-index: 20; background: var(--brand); color: #fff; border-radius: 999px; padding: 10px 14px; text-decoration: none; box-shadow: 0 2px 8px rgba(0,0,0,.2); }
+@media (max-width: 720px) {
+  .tabbar { display: grid; grid-template-columns: repeat(4, 1fr); position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; background: var(--card); border-top: 1px solid var(--line);
+    padding-bottom: env(safe-area-inset-bottom); }
+  .tabbar a { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 56px; font-size: .8rem; text-decoration: none; color: var(--muted); }
+  .tabbar a span { font-size: 1.2rem; line-height: 1.2; }
+  .tabbar a[aria-current="page"] { color: var(--brand); font-weight: 700; }
+  body { padding-bottom: calc(64px + env(safe-area-inset-bottom)); }
+  .to-top { bottom: calc(72px + env(safe-area-inset-bottom)); }
+  .progress progress { flex-basis: 80px; }
+  .preview dl { grid-template-columns: 1fr; }
+  .quick a { flex: 1 1 calc(50% - 8px); justify-content: center; }
+}
+
+/* ── 고대비 ── */
+html.hc { --bg: #000; --fg: #fff; --muted: #fff; --line: #fff; --card: #000; --brand: #ffeb3b; --brand-dark: #ffeb3b; --info-bg: #000; --warn-bg: #000; --warn: #ffeb3b; --err: #ff8a80; --err-bg: #000; --ok: #b9f6ca; }
+html.hc body { background: #000; color: #fff; } html.hc a { color: #ffeb3b; text-decoration: underline; }
+html.hc header.site { background: #000; border-bottom: 2px solid #fff; }
+html.hc input:not([type=checkbox]):not([type=radio]), html.hc select, html.hc textarea { background: #000; color: #fff; border: 2px solid #fff; }
+html.hc .btn { background: #000; color: #ffeb3b; border: 2px solid #ffeb3b; } html.hc .btn.primary { background: #ffeb3b; color: #000; }
+html.hc :focus-visible { outline: 3px solid #ffeb3b; outline-offset: 2px; }
+[data-contrast-toggle][aria-pressed="true"] { outline: 2px solid #ffeb3b; }
+
+/* ── 어두운 화면 (기기 설정을 따름) ── */
+@media (prefers-color-scheme: dark) {
+  html:not(.hc) { --bg: #0f1420; --fg: #e6e9f0; --muted: #a8b0c2; --line: #2c3547; --card: #171e2d; --brand: #8fb0ff; --brand-dark: #a9c1ff;
+    --err: #ff8a80; --err-bg: #2a1414; --warn-bg: #2a2410; --warn: #ffd27a; --info-bg: #142036; --ok: #7ee2a8; color-scheme: dark; }
+  html:not(.hc) input:not([type=checkbox]):not([type=radio]), html:not(.hc) select, html:not(.hc) textarea { background: #0f1420; border-color: #3a4560; }
+  html:not(.hc) .btn:not(.primary) { background: var(--card); color: var(--fg); border-color: var(--line); }
+  html:not(.hc) table, html:not(.hc) .table-wrap { background: var(--card); }
+}
+
+/* ── 움직임 줄이기 ── */
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
+
+/* ── 인쇄 ── */
+@media print {
+  .tabbar, .to-top, .offline-bar, .progress, .pw-tools, .share, .quick, .counter { display: none !important; }
+  a[href^="http"]::after { content: " (" attr(href) ")"; font-size: .8em; }
+  html.hc body, body { background: #fff !important; color: #000 !important; }
+  .process li, .glossary, .sitemap section { break-inside: avoid; }
+}

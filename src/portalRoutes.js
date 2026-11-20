@@ -212,9 +212,10 @@ function createPortalRoutes(h) {
     const { page } = parseListQuery(url.searchParams);
     const stRaw = url.searchParams.get('status');
     const status = stRaw === 'open' || stRaw === 'done' ? stRaw : '';
+    const q = String(url.searchParams.get('q') || '').trim().slice(0, 50);
     let data;
     try {
-      data = await nuri.memberComplaints(req.member.memberId, page, ip, status || undefined);
+      data = await nuri.memberComplaints(req.member.memberId, page, ip, status || undefined, q || undefined);
     } catch (e) {
       if (memberGone(req, res, e)) return;
       throw e;
@@ -225,7 +226,7 @@ function createPortalRoutes(h) {
       notice = `지난 로그인: ${String(req.session.previousLoginAt).replace('T', ' ')}. 본인이 아니면 비밀번호를 바꿔 주세요.`;
       req.session.shownPrev = true;
     }
-    send(res, 200, pv.myList(rc(req), data || {}, notice, status));
+    send(res, 200, pv.myList(rc(req), data || {}, notice, status, q));
   }
 
   async function myComplaint(req, res, ip, url, receiptNo) {
@@ -244,12 +245,39 @@ function createPortalRoutes(h) {
 
   /* ------------------------------------------------------------ 내 정보 */
 
+  /** 다른 기기의 내 로그인을 모두 끊는다 (이 기기는 그대로) */
+  async function logoutOthers(req, res, url) {
+    if (needLogin(req, res, url)) return;
+    const form = await readForm(req);
+    if (!verifyCsrf(req, form._csrf)) return send(res, 403, views.errorPage(rc(req), 403, '요청을 처리할 수 없습니다', '화면을 새로 고친 뒤 다시 해 주세요.'));
+    const n = sessions.destroyMember(req.member.memberId, req);
+    redirect(res, `/my/profile?others=${n}`);
+  }
+
+  /** 아이디를 쓸 수 있는지 (가입 화면에서 바로 알려 주기). 글자 규칙만 이 서버가 보고, 중복은 행정누리에 묻는다 */
+  async function checkLoginId(req, res, ip, url) {
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-store');
+    if (!limiters.idcheck.take(ip)) { res.statusCode = 429; return res.end('{"available":false,"reason":"잠시 뒤에 다시 확인해 주세요."}'); }
+    const id = String(url.searchParams.get('loginId') || '').trim();
+    if (!/^[a-z][a-z0-9_]{4,19}$/.test(id)) {
+      return res.end(JSON.stringify({ available: false, reason: '영문 소문자로 시작해 소문자·숫자·_ 5~20자로 정해 주세요.' }));
+    }
+    try {
+      const d = await nuri.checkLoginId(id, ip);
+      res.end(JSON.stringify({ available: !!(d && d.available), reason: d && d.available ? '쓸 수 있는 아이디입니다.' : (d && d.reason) || '이미 쓰고 있는 아이디입니다.' }));
+    } catch {
+      res.end(JSON.stringify({ available: null, reason: '지금은 확인할 수 없습니다. 가입할 때 다시 확인합니다.' }));
+    }
+  }
+
   async function profile(req, res, ip, url) {
     if (needLogin(req, res, url)) return;
     try {
       const m = await nuri.getMember(req.member.memberId, ip);
       send(res, 200, pv.profileForm(rc(req), { values: m || {}, csrf: csrf(req, res),
-        notice: url.searchParams.get('saved') === '1' ? '저장했습니다.' : url.searchParams.get('pw') === '1' ? '비밀번호를 바꿨습니다.' : '' }));
+        notice: url.searchParams.get('saved') === '1' ? '저장했습니다.' : url.searchParams.get('pw') === '1' ? '비밀번호를 바꿨습니다.'
+          : /^\d{1,4}$/.test(url.searchParams.get('others') || '') ? `다른 기기 ${url.searchParams.get('others')}곳의 로그인을 끊었습니다.` : '' }));
     } catch (e) {
       if (memberGone(req, res, e)) return;
       throw e;
@@ -345,6 +373,12 @@ function createPortalRoutes(h) {
 
   async function get(req, res, ip, url) {
     const p = url.pathname;
+    if (p === '/signup/check') return (await checkLoginId(req, res, ip, url), true);
+    if (p === '/session/ping') {
+      res.setHeader('Cache-Control', 'no-store');
+      res.statusCode = req.member ? 204 : 401;
+      return (res.end(), true);
+    }
     if (p === '/notices') return (await notices(req, res, ip, url), true);
     let mm = /^\/notices\/(\d{1,18})$/.exec(p);
     if (mm) return (await notice(req, res, ip, mm[1]), true);

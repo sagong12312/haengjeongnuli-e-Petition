@@ -58,6 +58,17 @@ function len(s) {
  * 양식 값 → { errors: {필드: 안내}, payload: 행정누리로 보낼 JSON }
  */
 /** opts.member: 로그인한 회원이면 조회 비밀번호를 정하지 않아도 된다 */
+/** 주민등록번호·외국인등록번호 꼴 (생년월일 6자리 - 성별 1~8 + 6자리) */
+function findResidentNo(text) {
+  return /(?<!\d)\d{2}(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])\s*[-–]?\s*[1-8]\d{6}(?!\d)/.test(String(text || ''));
+}
+
+function normalizeReceiptNo(v) {
+  const t = String(v || '').trim().replace(/[–—_.\s]/g, '-');
+  const m = /^(\d{4})-?(\d{1,6})$/.exec(t);
+  return m ? `${m[1]}-${m[2].padStart(6, '0')}` : t;
+}
+
 function validateComplaintForm(f, opts = {}) {
   const errors = {};
   const kind = str(f.kind);
@@ -116,6 +127,9 @@ function validateComplaintForm(f, opts = {}) {
   else if (len(title) > 300) errors.title = '제목은 300자 이내로 적어 주세요.';
 
   if (!content) errors.content = '내용을 적어 주세요.';
+  else if (findResidentNo(content) || findResidentNo(title)) {
+    errors.content = '주민등록번호로 보이는 숫자(000000-0000000)가 있습니다. 민원 처리에 필요하지 않으니 지우고 다시 신청해 주세요. 꼭 필요하면 담당자가 따로 연락드립니다.';
+  }
   else if (len(content) > 20000) errors.content = '내용은 20,000자 이내로 적어 주세요.';
 
   if (opts.member && !password && !password2) {
@@ -216,7 +230,8 @@ module.exports.validateSignupForm = validateSignupForm;
 
 function validateLookupForm(f) {
   const errors = {};
-  const receiptNo = str(f.receiptNo);
+  // 2026000123 · 2026 000123 · 2026–000123 처럼 적어도 2026-000123 으로 맞춘다
+  const receiptNo = normalizeReceiptNo(str(f.receiptNo));
   const password = typeof f.password === 'string' ? f.password : '';
   if (!RECEIPT_RE.test(receiptNo)) errors.receiptNo = '접수번호를 2026-000123 꼴로 적어 주세요.';
   if (!password || password.length > 20) errors.password = '조회 비밀번호를 적어 주세요.';
@@ -234,6 +249,7 @@ function parseListQuery(searchParams) {
 }
 
 module.exports = {
+  findResidentNo, normalizeReceiptNo,
   ...module.exports,
   KINDS, CATEGORIES, NOTIFY_METHODS, validateComplaintForm, validateLookupForm, parseListQuery, PASSWORD_RE, RECEIPT_RE,
   LOGIN_ID_RE, memberPasswordProblem, validateProfile,

@@ -56,7 +56,18 @@ test('길이 제한', () => {
 
 test('조회 양식', () => {
   assert.deepEqual(validateLookupForm({ receiptNo: '2026-000123', password: 'abc12345' }).errors, {});
-  assert.ok(validateLookupForm({ receiptNo: '2026-12', password: 'x' }).errors.receiptNo);
+  assert.ok(validateLookupForm({ receiptNo: '26-12', password: 'x' }).errors.receiptNo);
+  // 앞자리 0 은 빼고 써도, 하이픈 없이·띄어 써도 같은 번호로 본다
+  const { normalizeReceiptNo } = require('../src/validation');
+  assert.equal(normalizeReceiptNo('2026-12'), '2026-000012');
+  assert.equal(normalizeReceiptNo('2026000123'), '2026-000123');
+  assert.equal(normalizeReceiptNo(' 2026 000123 '), '2026-000123');
+});
+
+test('개인정보: 주민등록번호가 들어간 민원은 받지 않는다', () => {
+  const { findResidentNo } = require('../src/validation');
+  assert.ok(findResidentNo('제 번호는 900101-1234567 입니다'));
+  assert.ok(!findResidentNo('접수번호 2026-000123, 전화 010-1234-5678'));
 });
 
 test('목록 쿼리: page 는 1 이상, q 는 100자까지', () => {

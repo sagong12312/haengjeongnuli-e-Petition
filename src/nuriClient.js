@@ -169,6 +169,7 @@ function createNuriClient({ baseUrl, secret, timeoutMs = 10000, ca, logger = con
     /* ---------------- 회원 */
     signup(member, clientIp) { return request('POST', '/members', member, clientIp); },
     login(loginId, password, clientIp) { return request('POST', '/members/login', { loginId, password }, clientIp); },
+    checkLoginId(loginId, clientIp) { return request('GET', `/members/check?loginId=${encodeURIComponent(loginId)}`, undefined, clientIp); },
     getMember(memberId, clientIp) { return request('GET', `/members/${encodeURIComponent(String(memberId))}`, undefined, clientIp); },
     updateMember(memberId, profile, clientIp) {
       return request('POST', `/members/${encodeURIComponent(String(memberId))}/profile`, profile, clientIp);
@@ -179,9 +180,10 @@ function createNuriClient({ baseUrl, secret, timeoutMs = 10000, ca, logger = con
     deleteMember(memberId, password, clientIp) {
       return request('POST', `/members/${encodeURIComponent(String(memberId))}/delete`, { password }, clientIp);
     },
-    memberComplaints(memberId, page, clientIp, status) {
+    memberComplaints(memberId, page, clientIp, status, q) {
       const st = status === 'open' || status === 'done' ? `&status=${status}` : '';
-      return request('GET', `/members/${encodeURIComponent(String(memberId))}/complaints?page=${encodeURIComponent(String(page))}${st}`, undefined, clientIp);
+      const qs = q ? `&q=${encodeURIComponent(String(q).slice(0, 50))}` : '';
+      return request('GET', `/members/${encodeURIComponent(String(memberId))}/complaints?page=${encodeURIComponent(String(page))}${st}${qs}`, undefined, clientIp);
     },
     memberComplaint(memberId, receiptNo, clientIp) {
       return request('GET', `/members/${encodeURIComponent(String(memberId))}/complaints/${encodeURIComponent(receiptNo)}`, undefined, clientIp);

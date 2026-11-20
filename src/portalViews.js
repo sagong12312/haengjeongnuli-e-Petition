@@ -4,7 +4,7 @@
  * 바깥에서 온 값은 모두 esc() 로 글자로만 출력합니다.
  */
 const {
-  esc, dt, layout, complaintDetail, ownerActions, fieldError, aria, errorSummary, captchaField, searchBox, pager, statusBadge,
+  esc, dt, layout, complaintDetail, ddayBadge, ownerActions, fieldError, aria, errorSummary, captchaField, searchBox, pager, statusBadge,
 } = require('./views');
 
 /* ------------------------------------------------------------------ 공지사항 */
@@ -289,7 +289,7 @@ function logoutConfirm(ctx, csrf) {
 
 /* ------------------------------------------------------------------ 내 민원 */
 
-function myList(ctx, data, notice = '', status = '') {
+function myList(ctx, data, notice = '', status = '', q = '') {
   const items = Array.isArray(data.items) ? data.items : [];
   const rows = items.map((c) => `<tr>
   <td class="title" data-label="제목"><a href="/my/complaints/${encodeURIComponent(c.receiptNo)}">${esc(c.title)}</a></td>
@@ -297,7 +297,7 @@ function myList(ctx, data, notice = '', status = '') {
   <td data-label="접수번호">${esc(c.receiptNo)}</td>
   <td data-label="종류">${esc(c.kindLabel)}</td>
   <td data-label="접수">${dt(c.receivedAt)}</td>
-  <td data-label="${c.completedAt ? '처리 완료' : '처리기한'}">${c.completedAt ? dt(c.completedAt) : dt(c.deadlineAt) + ' 까지'}</td>
+  <td data-label="${c.completedAt ? '처리 완료' : '처리기한'}">${c.completedAt ? dt(c.completedAt) : dt(c.deadlineAt) + ' 까지' + (c.statusLabel === '취하' ? '' : ddayBadge(c.deadlineAt))}</td>
 </tr>`).join('');
   return layout(ctx, '내 민원', `
 <h1>내 민원</h1>
@@ -307,11 +307,14 @@ ${notice ? `<div class="alert alert-ok" role="status"><p>${esc(notice)}</p></div
   <a href="/my?status=open"${status === 'open' ? ' aria-current="page"' : ''}>처리 중</a>
   <a href="/my?status=done"${status === 'done' ? ' aria-current="page"' : ''}>처리 완료</a>
 </nav>
-<p class="count">${status === 'open' ? '처리 중 ' : status === 'done' ? '처리 완료 ' : '모두 '}${esc(data.total ?? 0)}건 · <a href="/complaints/new">새 민원 신청</a></p>
+<form class="search" method="get" action="/my" role="search">${status ? `<input type="hidden" name="status" value="${esc(status)}">` : ''}
+  <label for="mq" class="sr-only">제목 검색</label><input id="mq" name="q" value="${esc(q)}" maxlength="50" placeholder="내 민원 제목 검색"><button type="submit" class="btn">검색</button></form>
+<p class="count">${q ? `‘${esc(q)}’ ` : ''}${status === 'open' ? '처리 중 ' : status === 'done' ? '처리 완료 ' : '모두 '}${esc(data.total ?? 0)}건 · <a href="/complaints/new">새 민원 신청</a></p>
 ${items.length ? `<div class="table-wrap"><table class="list stack">
 <thead><tr><th scope="col">제목</th><th scope="col">상태</th><th scope="col">접수번호</th><th scope="col">종류</th><th scope="col">접수</th><th scope="col">처리 완료 / 기한</th></tr></thead>
 <tbody>${rows}</tbody></table></div>` : status ? '<p class="empty">이 상태의 민원이 없습니다.</p>' : '<p class="empty">회원으로 신청한 민원이 없습니다. 가입하기 전에 낸 민원은 <a href="/lookup">처리상황 조회</a>에서 접수번호로 보세요.</p>'}
-${pager('/my', data, '', status ? `&amp;status=${status}` : '')}`, 'my');
+${pager('/my', data, q, status ? `&amp;status=${status}` : '')}
+${items.length ? '<p class="no-print"><button type="button" class="btn" data-print>목록 인쇄</button></p>' : ''}`, 'my');
 }
 
 function myComplaint(ctx, d, csrf) {
@@ -350,7 +353,11 @@ ${input(v, errors, 'email', '이메일', 'type="email" maxlength="200" autocompl
 ${input(v, errors, 'address', '주소', 'maxlength="500" autocomplete="street-address"')}
 <div class="actions"><button type="submit" class="btn primary">저장</button></div>
 </form>
-<ul class="links"><li><a href="/my/password">비밀번호 바꾸기</a></li><li><a href="/my/withdraw">회원 탈퇴</a></li></ul>`, 'my');
+<ul class="links"><li><a href="/my/password">비밀번호 바꾸기</a></li><li><a href="/my/withdraw">회원 탈퇴</a></li></ul>
+<form method="post" action="/my/sessions/logout-others" class="inline-block">
+<input type="hidden" name="_csrf" value="${esc(csrf)}">
+<p class="hint">다른 PC·휴대폰에 로그인한 채로 두고 왔으면 그 기기들을 모두 로그아웃시킵니다. 이 기기는 그대로입니다.</p>
+<button type="submit" class="btn">다른 기기 모두 로그아웃</button></form>`, 'my');
 }
 
 function passwordForm(ctx, { errors = {}, message = '', csrf }) {

@@ -78,6 +78,8 @@ function loadConfig(env = process.env) {
     cookieSecure: bool(env.COOKIE_SECURE, true),
     orgName: env.ORG_NAME || '○○기관',
     orgContact: env.ORG_CONTACT || '기관 민원실',
+    orgAddress: env.ORG_ADDRESS || '',
+    orgHours: env.ORG_HOURS || '',
     privacyRetention:
       env.PRIVACY_RETENTION || '행정누리 민원 기록 보존기간과 같은 기간 (기관 기록관리 기준)',
   };

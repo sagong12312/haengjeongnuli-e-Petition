@@ -47,6 +47,7 @@ function layout(ctx, title, body, active = '') {
     ['/dispositions', '행정처분 공개', 'disp'],
     ['/notices', '공지사항', 'notice'],
     ['/faq', '자주 묻는 질문', 'faq'],
+    ['/help', '도움말', 'help'],
   ].map(([href, label, key]) =>
     `<li><a href="${href}"${key === active ? ' aria-current="page"' : ''}>${label}</a></li>`).join('');
   return `<!doctype html>
@@ -74,9 +75,10 @@ function layout(ctx, title, body, active = '') {
   <div class="menu-panel" id="site-menu">
   <div class="util wrap">
     <ul aria-label="회원 메뉴">${ctx.member
-    ? `<li><span class="who">${esc(ctx.member.name)}님</span></li><li><a href="/my"${active === 'my' ? ' aria-current="page"' : ''}>내 민원</a></li><li><a href="/my/profile">내 정보</a></li><li><a href="/logout">로그아웃</a></li>`
+    ? `<li><span class="who">${esc(ctx.member.name)}님</span></li>${ctx.sessionIdleSec ? `<li><button type="button" class="linkish session-left" data-session-idle="${Number(ctx.sessionIdleSec)}" title="누르면 로그인 시간을 연장합니다">자동 로그아웃 <span data-left>${Math.floor(ctx.sessionIdleSec / 60)}분</span></button></li>` : ''}<li><a href="/my"${active === 'my' ? ' aria-current="page"' : ''}>내 민원</a></li><li><a href="/my/profile">내 정보</a></li><li><a href="/logout">로그아웃</a></li>`
     : `<li><a href="/login"${active === 'login' ? ' aria-current="page"' : ''}>로그인</a></li><li><a href="/signup"${active === 'signup' ? ' aria-current="page"' : ''}>회원가입</a></li>`}</ul>
     <button type="button" class="btn small" data-font-toggle aria-pressed="false">글자 크게</button>
+    <button type="button" class="btn small" data-contrast-toggle aria-pressed="false">고대비</button>
   </div>
   <div class="wrap navrow">
     <nav aria-label="주 메뉴"><ul>${nav}</ul></nav>
@@ -88,13 +90,37 @@ ${body}
 </main>
 <footer class="site">
   <div class="wrap">
-    <p><a href="/guide">민원 안내</a> · <a href="/stats">처리 통계</a> · <a href="/terms">이용약관</a> · <a href="/privacy"><strong>개인정보 처리방침</strong></a></p>
+    <p><a href="/guide">민원 안내</a> · <a href="/help">도움말</a> · <a href="/contact">찾아오는 길</a> · <a href="/stats">처리 통계</a> · <a href="/sitemap">전체 메뉴</a> · <a href="/terms">이용약관</a> · <a href="/privacy"><strong>개인정보 처리방침</strong></a> · <a href="/en" lang="en">English</a></p>
     <p>${esc(ctx.orgName)} · 문의 ${telLinks(ctx.orgContact)}</p>
     <p>법정민원(구비서류·수수료가 있는 민원)은 <a href="https://www.gov.kr" rel="noopener noreferrer">정부24</a> 또는 기관 민원 창구에서 신청하세요.</p>
   </div>
 </footer>
+<nav class="tabbar no-print" aria-label="자주 쓰는 메뉴">
+  <a href="/complaints/new"${active === 'new' ? ' aria-current="page"' : ''}><span aria-hidden="true">✎</span>신청</a>
+  <a href="/lookup"${active === 'lookup' ? ' aria-current="page"' : ''}><span aria-hidden="true">🔍</span>조회</a>
+  <a href="${ctx.member ? '/my' : '/login'}"${active === 'my' || active === 'login' ? ' aria-current="page"' : ''}><span aria-hidden="true">👤</span>${ctx.member ? '내 민원' : '로그인'}</a>
+  <a href="/sitemap"><span aria-hidden="true">☰</span>전체</a>
+</nav>
+<a class="to-top no-print" href="#main" data-to-top hidden>맨 위로</a>
 </body>
 </html>`;
+}
+
+/** 처리기한까지 남은 날 (D-3, D-day, 기한 지남). 한국 시각 기준 날짜로 센다 */
+function dday(deadlineAt, now = Date.now()) {
+  const t = Date.parse(String(deadlineAt || '').replace(' ', 'T') + (/[zZ]|[+-]\d\d:?\d\d$/.test(String(deadlineAt || '')) ? '' : '+09:00'));
+  if (!Number.isFinite(t)) return '';
+  const day = (ms) => Math.floor((ms + 9 * 3600_000) / 86400_000);
+  const n = day(t) - day(now);
+  if (n > 0) return `D-${n}`;
+  if (n === 0) return 'D-day';
+  return '기한 지남';
+}
+
+function ddayBadge(d) {
+  const t = dday(d);
+  if (!t) return '';
+  return ` <span class="badge ${t === '기한 지남' ? 'st-new' : t === 'D-day' || t === 'D-1' ? 'st-progress' : 'st-received'}">${t}</span>`;
 }
 
 function fieldError(errors, key) {
@@ -127,7 +153,7 @@ function captchaField(captchaId, errors) {
 
 /* ------------------------------------------------------------------ 첫 화면 */
 
-function home(ctx, notices = []) {
+function home(ctx, notices = [], { popular = [], stats = null } = {}) {
   const list = notices.length ? `<ul class="news">${notices.map((n) =>
     `<li><a href="/notices/${encodeURIComponent(String(n.id))}">${n.pinned ? '<span class="badge st-progress">고정</span> ' : ''}${esc(n.title)}</a> <time>${dt(n.createdAt).slice(0, 10)}</time></li>`).join('')}</ul>`
     : '<p class="empty">올라온 공지사항이 없습니다.</p>';
@@ -144,10 +170,24 @@ function home(ctx, notices = []) {
   <a class="card" href="/guide"><h2>민원 안내</h2><p>민원 종류별 처리기간과 신청 방법을 봅니다.</p></a>
   <a class="card" href="/stats"><h2>처리 통계</h2><p>최근 12개월 접수·처리 건수, 평균 처리일, 만족도를 봅니다.</p></a>
 </div>
+${stats ? `<section class="home-stats" aria-labelledby="hs-t">
+  <h2 id="hs-t">최근 12개월 처리 현황 <a class="more" href="/stats">자세히</a></h2>
+  <ul class="nums">
+    <li><strong>${esc(Number(stats.received || 0).toLocaleString('ko-KR'))}</strong><span>접수</span></li>
+    <li><strong>${esc(Number(stats.done || 0).toLocaleString('ko-KR'))}</strong><span>처리</span></li>
+    ${stats.avgDays != null ? `<li><strong>${esc(stats.avgDays)}일</strong><span>평균 처리</span></li>` : ''}
+    ${stats.onTimeRate != null ? `<li><strong>${esc(stats.onTimeRate)}%</strong><span>기한 안 처리</span></li>` : ''}
+  </ul>
+</section>` : ''}
 <section class="home-notices">
   <h2>공지사항 <a class="more" href="/notices">더 보기</a></h2>
   ${list}
 </section>
+${popular.length ? `<section class="home-notices">
+  <h2>많이 본 공개 상담 <a class="more" href="/consultations?sort=views">더 보기</a></h2>
+  <ol class="news">${popular.map((c) => `<li><a href="/consultations/${encodeURIComponent(String(c.id))}">${esc(c.title)}</a> <span class="hint">${esc(c.categoryLabel || '')}</span></li>`).join('')}</ol>
+</section>` : ''}
+<p class="quick no-print"><a class="btn" href="/help/which">어떤 민원인지 모르겠어요</a> <a class="btn" href="/help/deadline">처리기한 계산</a> <a class="btn" href="/contact">문의·찾아오는 길</a></p>
 ${ctx.member ? '' : `<p class="hint">회원으로 가입하면 접수번호·조회 비밀번호 없이 <a href="/my">내 민원</a>에서 처리 상황을 보고, 신청서에 이름·연락처가 미리 채워집니다. <a href="/signup">회원가입</a></p>`}
 <div class="notice">
   <h2>알아 두세요</h2>
@@ -368,7 +408,7 @@ function complaintDetail(d, { showName = true } = {}) {
   ${showName ? `<dt>신청인</dt><dd>${esc(d.name)}</dd>` : ''}
   ${d.status ? `<dt>처리 상태</dt><dd>${statusBadge(d.status, d.statusLabel)}</dd>` : ''}
   <dt>접수 일시</dt><dd>${dt(d.receivedAt)}</dd>
-  ${d.deadlineAt ? `<dt>처리기한</dt><dd>${dt(d.deadlineAt)}</dd>` : ''}
+  ${d.deadlineAt ? `<dt>처리기한</dt><dd>${dt(d.deadlineAt)}${d.status !== 'DONE' ? ddayBadge(d.deadlineAt) : ''}</dd>` : ''}
   <dt>담당 부서</dt><dd>${esc(d.dept) || '배정 전'}</dd>
 </dl>
 <section>
@@ -544,14 +584,33 @@ ${pager('/dispositions', data, q)}`, 'disp');
 /* ------------------------------------------------------------------ 오류 */
 
 function errorPage(ctx, status, title, message) {
+  const help = status === 404 ? `
+<h2>이런 곳을 찾으셨나요?</h2>
+<ul><li><a href="/complaints/new">민원 신청</a></li><li><a href="/lookup">처리상황 조회</a></li><li><a href="/consultations">공개 상담</a></li><li><a href="/faq">자주 묻는 질문</a></li><li><a href="/sitemap">전체 메뉴</a></li></ul>
+<form class="search" method="get" action="/consultations" role="search"><label for="eq" class="sr-only">공개 상담 검색</label>
+<input id="eq" name="q" maxlength="100" placeholder="공개 상담에서 찾기"><button type="submit" class="btn">검색</button></form>`
+    : status === 403 && /오래되었거나|새로 고친/.test(message) ? '<p class="hint">쓰던 민원 내용(종류·분야·제목·내용)은 이 브라우저에 임시저장되어 있어, 신청 화면을 다시 열면 불러옵니다.</p>' : '';
   return layout(ctx, title, `
 <h1>${esc(title)}</h1>
 <div class="alert alert-error" role="alert"><p>${esc(message)}</p></div>
+${help}
 <p><a class="btn" href="/">첫 화면으로</a></p>`);
 }
 
+/** 인터넷이 끊겼을 때 서비스 워커가 보여 주는 화면 (개인정보 없음) */
+function offlinePage(ctx) {
+  return layout(ctx, '인터넷 연결 끊김', `
+<h1>인터넷 연결이 끊겼습니다</h1>
+<p>휴대폰 신호나 와이파이를 확인한 뒤 <a href="/">다시 열어</a> 주세요.</p>
+<ul>
+  <li>쓰던 민원 신청서의 제목·내용은 이 기기에 임시저장되어 있으니, 다시 연결되면 이어서 쓸 수 있습니다.</li>
+  <li>급한 민원은 ${esc(ctx.orgContact)}(으)로 전화해 주세요.</li>
+</ul>`);
+}
+
 module.exports = {
-  stageBar,
+  offlinePage,
+  stageBar, dday, ddayBadge,
   esc, dt, layout, telLinks, home, complaintForm, complaintDone, lookupForm, lookupResult, ownerActions, complaintDetail,
   fieldError, aria, errorSummary, captchaField, searchBox, pager, statusBadge,
   consultationList, consultationDetail, dispositionList, errorPage,

@@ -20,6 +20,7 @@ const { checkAttachments } = require('./attachments');
 const { SessionStore } = require('./session');
 const { createPortalRoutes } = require('./portalRoutes');
 const secapps = require('./secapps');
+const { createExtras } = require('./extras');
 
 const MAX_FORM_BYTES = 256 * 1024;
 /** 민원 신청(첨부 5MB × 3개 + 글)만 더 크게 받는다 */
@@ -32,6 +33,7 @@ const STATIC = {
   '/static/icon-180.png': { file: path.join(__dirname, '..', 'public', 'icon-180.png'), type: 'image/png' },
   '/static/icon-192.png': { file: path.join(__dirname, '..', 'public', 'icon-192.png'), type: 'image/png' },
   '/static/icon-512.png': { file: path.join(__dirname, '..', 'public', 'icon-512.png'), type: 'image/png' },
+  '/sw.js': { file: path.join(__dirname, '..', 'public', 'sw.js'), type: 'text/javascript; charset=utf-8' },
   '/favicon.ico': { file: path.join(__dirname, '..', 'public', 'icon-192.png'), type: 'image/png' },
   '/robots.txt': {
     body: 'User-agent: *\nDisallow: /lookup\nDisallow: /complaints\nDisallow: /captcha/\nDisallow: /my\nDisallow: /login\nDisallow: /signup\nDisallow: /logout\n',
@@ -106,6 +108,8 @@ function createApp({ config, nuri, logger = console, captcha, limits = {}, sessi
   const ctx = {
     orgName: config.orgName,
     orgContact: config.orgContact,
+    orgAddress: config.orgAddress || '',
+    orgHours: config.orgHours || '',
     privacyRetention: config.privacyRetention,
   };
   const captchas = captcha || new CaptchaStore();
@@ -117,13 +121,15 @@ function createApp({ config, nuri, logger = console, captcha, limits = {}, sessi
     captcha: new RateLimiter(limits.captcha || { limit: 60, windowMs: 60_000 }),
     login: new RateLimiter(limits.login || { limit: 10, windowMs: 10 * 60_000 }),
     signup: new RateLimiter(limits.signup || { limit: 5, windowMs: 60 * 60_000 }),
+    idcheck: new RateLimiter(limits.idcheck || { limit: 40, windowMs: 10 * 60_000 }),
     action: new RateLimiter(limits.action || { limit: 30, windowMs: 10 * 60_000 }),
   };
   const sessions = sessionStore || new SessionStore({ cookieSecure: config.cookieSecure });
   const secApps = secapps.createSecApps({ nuri, logger });
+  const extras = createExtras({ nuri, send: (res, st, html) => send(res, st, html), ctxOf: (req) => rc(req), logger, isSecure: (req) => isSecure(req, config.trustProxy) });
   let warnedNoTls = false;
   /** 화면에 넘길 값: 로그인했으면 회원 이름도 */
-  const rc = (req) => (req && req.member ? { ...ctx, member: req.member } : ctx);
+  const rc = (req) => (req && req.member ? { ...ctx, member: req.member, sessionIdleSec: Math.floor(sessions.idleMs / 1000) } : ctx);
   function redirect(res, location) {
     res.statusCode = 303;
     res.setHeader('Location', location);
@@ -252,24 +258,41 @@ function createApp({ config, nuri, logger = console, captcha, limits = {}, sessi
   /* -------------------------------------------------------------- 첫 화면 · 신청서 */
 
   async function home(req, res, ip) {
-    let notices = [];
+    // 하나가 안 돼도 첫 화면은 보여 준다 (셋을 함께 부른다)
+    const [n, pop, st] = await Promise.all([
+      nuri.listNotices(1, '', ip).catch((e) => { logger.warn?.(`[home] 공지사항을 가져오지 못했습니다: ${e.code || e.message}`); return null; }),
+      nuri.listConsultations(1, '', ip, { sort: 'views' }).catch(() => null),
+      homeStats(ip),
+    ]);
+    const notices = n && Array.isArray(n.items) ? n.items.slice(0, 5) : [];
+    const popular = pop && Array.isArray(pop.items) ? pop.items.slice(0, 5) : [];
+    send(res, 200, views.home(rc(req), notices, { popular, stats: st }));
+  }
+
+  // 첫 화면 숫자는 10분 동안 기억한다 (매번 행정누리에 묻지 않게)
+  let statsCache = { at: 0, data: null };
+  async function homeStats(ip) {
+    if (Date.now() - statsCache.at < 10 * 60_000) return statsCache.data;
     try {
-      const d = await nuri.listNotices(1, '', ip);
-      notices = Array.isArray(d && d.items) ? d.items.slice(0, 5) : [];
-    } catch (e) {
-      // 공지를 못 가져와도 첫 화면은 보여 준다
-      logger.warn?.(`[home] 공지사항을 가져오지 못했습니다: ${e.code || e.message}`);
-    }
-    send(res, 200, views.home(rc(req), notices));
+      const s = await nuri.stats(ip);
+      statsCache = { at: Date.now(), data: s ? { received: s.received, done: s.done, avgDays: s.avgDays, onTimeRate: s.onTimeRate } : null };
+    } catch { statsCache = { at: Date.now(), data: statsCache.data }; }
+    return statsCache.data;
   }
 
   /** 회원이면 이름·연락처를 미리 채운다 */
-  async function newComplaint(req, res, ip) {
-    if (!req.member) return showComplaintForm(req, res);
-    let values = { name: req.member.name };
+  async function newComplaint(req, res, ip, url) {
+    // /complaints/new?kind=QUERY&category=ROAD 처럼 들어오면 미리 골라 둔다 (도우미·안내 화면에서 넘어올 때)
+    const pre = {};
+    const k = url && url.searchParams.get('kind');
+    const c = url && url.searchParams.get('category');
+    if (/^(QUERY|SUGGESTION|GRIEVANCE|OTHER)$/.test(k || '')) pre.kind = k;
+    if (c && CATEGORIES[c]) pre.category = c;
+    if (!req.member) return showComplaintForm(req, res, 200, pre);
+    let values = { ...pre, name: req.member.name };
     try {
       const mem = await nuri.getMember(req.member.memberId, ip);
-      values = { name: mem.name, mobile: mem.mobile || '', email: mem.email || '', address: mem.address || '' };
+      values = { ...pre, name: mem.name, mobile: mem.mobile || '', email: mem.email || '', address: mem.address || '' };
     } catch (e) {
       if (e instanceof NuriApiError && e.code === 'member_not_found') {
         sessions.destroy(req, res);
@@ -437,7 +460,7 @@ function createApp({ config, nuri, logger = console, captcha, limits = {}, sessi
     req.member = sess ? { memberId: sess.memberId, loginId: sess.loginId, name: sess.name } : null;
 
     // 강제 보안 프로그램을 설치하지 않았으면 설치 안내로 보낸다 (안내·약관·정적 파일은 그대로)
-    const open = p === '/security-programs' || p === '/healthz' || p === '/robots.txt' || p === '/manifest.webmanifest'
+    const open = p === '/security-programs' || p === '/healthz' || p === '/offline' || p === '/robots.txt' || p === '/manifest.webmanifest'
       || p === '/terms' || p === '/privacy' || STATIC[p] || p.startsWith('/captcha/');
     // 보안 프로그램은 PC 용이다. 휴대폰·태블릿은 설치할 수 없으므로 강제 항목으로 막지 않는다
     if (!open && !secapps.isMobile(req)) {
@@ -467,7 +490,11 @@ function createApp({ config, nuri, logger = console, captcha, limits = {}, sessi
           ],
         }));
       }
-      if (p === '/complaints/new') return newComplaint(req, res, ip);
+      if (p === '/offline') {
+        // 서비스 워커가 미리 받아 두는 '연결 끊김' 안내. 누구에게나 같은 내용이어야 하므로 회원 정보를 넣지 않는다
+        return send(res, 200, views.offlinePage({ ...ctx, member: null, sessionIdleSec: 0 }));
+      }
+      if (p === '/complaints/new') return newComplaint(req, res, ip, url);
       if (p === '/lookup') return showLookupForm(req, res);
       if (p === '/consultations') return consultations(req, res, ip, url);
       if (p === '/consultations/similar') return similarConsultations(req, res, ip, url);
@@ -483,6 +510,7 @@ function createApp({ config, nuri, logger = console, captcha, limits = {}, sessi
         return res.end(svg);
       }
       if (await portal.get(req, res, ip, url)) return undefined;
+      if (await extras.get(req, res, ip, url)) return undefined;
       return notFound(res);
     }
 

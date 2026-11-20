@@ -405,6 +405,11 @@ function createMockNuri({
       return ok(res, { receiptNo: rec.receiptNo, score: b.score });
     }
     // 회원
+    if (G && p === '/members/check') {
+      const id = u.searchParams.get('loginId') || '';
+      const taken = [...members.values()].some((x) => x.loginId === id);
+      return ok(res, { available: !taken, reason: taken ? '이미 쓰고 있는 아이디입니다.' : '' });
+    }
     if (P && p === '/members') {
       if (b.termsConsent !== true || b.privacyConsent !== true) return fail(res, 422, 'consent_required', '이용약관과 개인정보 수집·이용에 동의해야 가입할 수 있습니다.');
       if (!/^[a-z][a-z0-9_]{4,19}$/.test(b.loginId || '')) return fail(res, 422, 'invalid_login_id', '아이디 규칙을 확인하세요.');
@@ -459,7 +464,8 @@ function createMockNuri({
       const mine = [...complaints.values()].filter((r) => r.memberId === mem.memberId).reverse();
       if (G && rest === '/complaints') {
         const st = u.searchParams.get('status');
-        const pick = mine.filter((r) => st === 'open' ? r.status !== 'DONE' : st === 'done' ? r.status === 'DONE' : true);
+        const q = (u.searchParams.get('q') || '').trim();
+        const pick = mine.filter((r) => (st === 'open' ? r.status !== 'DONE' : st === 'done' ? r.status === 'DONE' : true) && (!q || r.title.includes(q)));
         return ok(res, paginate(pick.map((r) => ({ receiptNo: r.receiptNo, kindLabel: KIND_LABEL[r.kind], title: r.title, status: r.status,
           statusLabel: r.result && r.result.type === '취하' ? '취하' : { RECEIVED: '접수', IN_PROGRESS: '처리 중', DONE: '처리 완료' }[r.status],
           receivedAt: r.receivedAt, deadlineAt: r.deadlineAt, completedAt: r.result ? r.result.completedAt : null })), page));
