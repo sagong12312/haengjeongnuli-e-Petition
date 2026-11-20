@@ -121,6 +121,7 @@ function createApp({ config, nuri, logger = console, captcha, limits = {}, sessi
   };
   const sessions = sessionStore || new SessionStore({ cookieSecure: config.cookieSecure });
   const secApps = secapps.createSecApps({ nuri, logger });
+  let warnedNoTls = false;
   /** 화면에 넘길 값: 로그인했으면 회원 이름도 */
   const rc = (req) => (req && req.member ? { ...ctx, member: req.member } : ctx);
   function redirect(res, location) {
@@ -408,10 +409,18 @@ function createApp({ config, nuri, logger = console, captcha, limits = {}, sessi
     // 와이파이·인터넷에서 http 로 오면 비밀번호·개인정보가 그대로 보이므로 받지 않는다
     if (config.requireHttps && !secure && !(isLoopback(req) && !config.trustProxy)) {
       const host = String(req.headers.host || '');
-      if ((req.method === 'GET' || req.method === 'HEAD') && /^[A-Za-z0-9.\-[\]:]{1,255}$/.test(host)) {
+      // https 로 받을 곳이 있을 때만 넘긴다: 이 서버가 인증서로 켜졌거나(같은 포트) 앞단 프록시가 https 를 받을 때.
+      // 둘 다 아니면 넘겨도 아무도 받지 않아 "연결할 수 없음"만 뜨므로, 무엇을 해야 하는지 알려 준다.
+      const httpsReady = Boolean(config.tls) || config.trustProxy;
+      if (httpsReady && (req.method === 'GET' || req.method === 'HEAD') && /^[A-Za-z0-9.\-[\]:]{1,255}$/.test(host)) {
         res.statusCode = 308;
-        res.setHeader('Location', `https://${host.replace(/:\d+$/, (m) => (config.tls ? m : ''))}${String(req.url).startsWith('/') ? req.url : '/'}`);
+        res.setHeader('Location', `https://${host.replace(/:\d+$/, (mm) => (config.tls ? mm : ''))}${String(req.url).startsWith('/') ? req.url : '/'}`);
         return res.end();
+      }
+      if (!httpsReady) {
+        if (!warnedNoTls) { warnedNoTls = true; logger.warn?.('[https] 인증서 없이 켜져 있어 다른 기기의 접속을 받을 수 없습니다. scripts\\start-all.bat 로 켜거나 TLS_PFX_FILE 을 주세요.'); }
+        return send(res, 403, views.errorPage(ctx, 403, '아직 휴대폰·다른 기기에서는 열 수 없습니다',
+          '이 서버가 암호화(HTTPS) 없이 켜져 있어, 개인정보 보호를 위해 이 PC 밖에서 오는 접속을 받지 않습니다. 관리자는 행정누리 폴더의 scripts\\start-all.bat 로 다시 켜 주세요 (HTTPS 인증서를 만들어 켭니다). 그다음 https:// 로 시작하는 주소로 접속하세요.'));
       }
       return send(res, 403, views.errorPage(ctx, 403, '암호화된 연결이 필요합니다',
         '개인정보를 보호하려고 https:// 로 시작하는 주소에서만 받습니다. 주소창의 http:// 를 https:// 로 바꿔 다시 접속하세요.'));
@@ -430,7 +439,8 @@ function createApp({ config, nuri, logger = console, captcha, limits = {}, sessi
     // 강제 보안 프로그램을 설치하지 않았으면 설치 안내로 보낸다 (안내·약관·정적 파일은 그대로)
     const open = p === '/security-programs' || p === '/healthz' || p === '/robots.txt' || p === '/manifest.webmanifest'
       || p === '/terms' || p === '/privacy' || STATIC[p] || p.startsWith('/captcha/');
-    if (!open) {
+    // 보안 프로그램은 PC 용이다. 휴대폰·태블릿은 설치할 수 없으므로 강제 항목으로 막지 않는다
+    if (!open && !secapps.isMobile(req)) {
       const missing = await secApps.missing(req, ip, parseCookies);
       if (missing.length) {
         if (m === 'GET' || m === 'HEAD') return redirect(res, `/security-programs?next=${encodeURIComponent(secapps.safeNext(p + url.search))}`);

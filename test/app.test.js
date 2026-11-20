@@ -220,3 +220,41 @@ test('HTTPS 포트로 http:// 가 와도 오류 대신 https:// 로 넘긴다', 
   });
   assert.equal(body, 'ok');
 });
+
+test('인증서 없이 켰을 때 다른 기기의 http 는 없는 https 주소로 넘기지 않고 할 일을 알려 준다', async (t) => {
+  const http = require('node:http');
+  const { PassThrough } = require('node:stream');
+  const s = await startStack({ config: { requireHttps: true, trustProxy: false } });
+  t.after(() => s.close());
+  function call(ua) {
+    return new Promise((resolve) => {
+      const req = new PassThrough();
+      Object.assign(req, { method: 'GET', url: '/complaints/new', headers: { host: '192.168.0.5:3000', 'user-agent': ua || 'x' },
+        socket: { remoteAddress: '192.168.0.20' } });
+      req.end();
+      const res = new http.ServerResponse(req);
+      const chunks = [];
+      res.write = (c) => { chunks.push(Buffer.from(c)); return true; };
+      res.end = (c) => { if (c) chunks.push(Buffer.from(c)); resolve({ status: res.statusCode, location: res.getHeader('location'), text: Buffer.concat(chunks).toString('utf8') }); };
+      s.app(req, res);
+    });
+  }
+  const r = await call();
+  assert.equal(r.status, 403);
+  assert.equal(r.location, undefined, '받을 곳 없는 https 로 넘기지 않는다');
+  assert.match(r.text, /start-all\.bat/);
+});
+
+test('휴대폰·태블릿은 PC 용 강제 보안 프로그램으로 막지 않는다', async (t) => {
+  const { isMobile } = require('../src/secapps');
+  assert.equal(isMobile({ headers: { 'user-agent': 'Mozilla/5.0 (Linux; Android 14; SM-S921N) AppleWebKit/537.36 Chrome/131 Mobile Safari/537.36' } }), true);
+  assert.equal(isMobile({ headers: { 'user-agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)' } }), true);
+  assert.equal(isMobile({ headers: { 'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/131' } }), false);
+  const s = await startStack();
+  t.after(() => s.close());
+  s.mock.addSecurityApp({ name: '키보드 보안', purpose: '입력 보호', required: true });
+  s.app.secApps.forget();
+  const agent = makeAgent(s.url);
+  assert.equal((await agent('GET', '/complaints/new', undefined, { 'User-Agent': 'Windows NT 10.0' })).status, 303);
+  assert.equal((await agent('GET', '/complaints/new', undefined, { 'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0) Mobile' })).status, 200);
+});

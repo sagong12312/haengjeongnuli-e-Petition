@@ -93,6 +93,12 @@ function createSecApps({ nuri, logger = console }) {
   return { list, missing, acked, setAck, checkOrigins, forget() { cache.at = 0; } };
 }
 
+/** 휴대폰·태블릿 브라우저 (PC 용 보안 프로그램을 설치할 수 없는 기기) */
+function isMobile(req) {
+  const ua = String((req && req.headers && req.headers['user-agent']) || '');
+  return /Android|iPhone|iPad|iPod|Mobile|SamsungBrowser/i.test(ua);
+}
+
 /** 같은 사이트 안의 경로만 (다른 사이트로 넘기지 않게) */
 function safeNext(v) {
   return typeof v === 'string' && /^\/[A-Za-z0-9/_\-.?=&%]*$/.test(v) && !v.startsWith('//') && v.length <= 200 && !v.startsWith('/security-programs')
@@ -126,4 +132,4 @@ ${items.length ? items.map(card).join('') : '<p class="empty">설치할 보안 �
 ${!blocked && next !== '/' ? `<p><a class="btn primary" href="${esc(next)}">하던 일로 돌아가기</a></p>` : ''}`);
 }
 
-module.exports = { createSecApps, page, safeNext, safeCheckUrl, parseAcked, COOKIE };
+module.exports = { isMobile, createSecApps, page, safeNext, safeCheckUrl, parseAcked, COOKIE };
